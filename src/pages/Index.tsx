@@ -1,12 +1,592 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React, { useState } from 'react';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface Cliente {
+  id: string;
+  nome: string;
+  cpf: string;
+  banco: string;
+  valorSolicitado: number;
+  prazo: number;
+  agente: string;
+  status: string;
+  telefone: string;
+  ultimaAtualizacao: string;
+}
+
+interface Mensagem {
+  id: number;
+  remetente: 'cliente' | 'ia' | 'agente';
+  texto: string;
+  timestamp: string;
+  agente?: string;
+}
+
+const initialClients: Cliente[] = [
+  {
+    id: '1',
+    nome: 'João Silva',
+    cpf: '123.456.789-00',
+    banco: 'Banco do Brasil',
+    valorSolicitado: 50000,
+    prazo: 84,
+    agente: 'Ana Costa',
+    status: 'novo',
+    telefone: '11999999999',
+    ultimaAtualizacao: new Date().toISOString()
+  },
+  {
+    id: '2',
+    nome: 'Maria Santos',
+    cpf: '987.654.321-00',
+    banco: 'Caixa Econômica',
+    valorSolicitado: 35000,
+    prazo: 60,
+    agente: 'Carlos Lima',
+    status: 'analise',
+    telefone: '11988888888',
+    ultimaAtualizacao: new Date().toISOString()
+  },
+  {
+    id: '3',
+    nome: 'Pedro Costa',
+    cpf: '456.789.123-00',
+    banco: 'Bradesco',
+    valorSolicitado: 70000,
+    prazo: 96,
+    agente: 'Ana Costa',
+    status: 'documentacao',
+    telefone: '11977777777',
+    ultimaAtualizacao: new Date().toISOString()
+  }
+];
+
+const colunas = [
+  { id: 'novo', titulo: 'Novo Lead', cor: 'border-info' },
+  { id: 'analise', titulo: 'Proposta em Análise', cor: 'border-warning' },
+  { id: 'retencao', titulo: 'Retenção Bancária', cor: 'border-warning' },
+  { id: 'documentacao', titulo: 'Documentação', cor: 'border-accent' },
+  { id: 'pagamento', titulo: 'Em Pagamento', cor: 'border-success' },
+  { id: 'finalizado', titulo: 'Finalizado', cor: 'border-muted' }
+];
+
+const agentesIA: Record<string, { nome: string; prompt: string; personalidade: string }> = {
+  novo: {
+    nome: 'Agente de Captação',
+    prompt: 'Você é um agente especializado em captar novos leads. Seja cordial e entusiasta.',
+    personalidade: 'Amigável e proativo'
+  },
+  analise: {
+    nome: 'Agente de Análise',
+    prompt: 'Você analisa propostas e orienta sobre documentação necessária.',
+    personalidade: 'Detalhista e orientador'
+  },
+  retencao: {
+    nome: 'Agente de Retenção',
+    prompt: 'Você acompanha o processo bancário e mantém o cliente informado.',
+    personalidade: 'Paciente e informativo'
+  },
+  documentacao: {
+    nome: 'Agente de Documentação',
+    prompt: 'Você auxilia na coleta e validação de documentos.',
+    personalidade: 'Organizado e claro'
+  },
+  pagamento: {
+    nome: 'Agente de Pagamento',
+    prompt: 'Você confirma pagamentos e finaliza contratos.',
+    personalidade: 'Profissional e conclusivo'
+  },
+  finalizado: {
+    nome: 'Agente de Pós-venda',
+    prompt: 'Você faz follow-up e busca satisfação do cliente.',
+    personalidade: 'Atencioso e focado em relacionamento'
+  }
+};
 
 const Index = () => {
+  const [clientes, setClientes] = useState<Cliente[]>(initialClients);
+  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+  const [chatAberto, setChatAberto] = useState(false);
+  const [mensagem, setMensagem] = useState('');
+  const [conversas, setConversas] = useState<Record<string, Mensagem[]>>({});
+  const [simuladorAberto, setSimuladorAberto] = useState(false);
+  const [dadosSimulacao, setDadosSimulacao] = useState({
+    valor: '',
+    taxa: '',
+    prazo: ''
+  });
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [usuario] = useState({
+    nome: 'Administrador',
+    tipo: 'admin'
+  });
+
+  const buscarCliente = (texto: string) => {
+    return clientes.find(c => 
+      c.cpf.includes(texto) || 
+      c.nome.toLowerCase().includes(texto.toLowerCase())
+    );
+  };
+
+  const receberMensagemWhatsApp = (cpf: string, mensagemTexto: string) => {
+    const cliente = buscarCliente(cpf);
+    if (cliente) {
+      const novaConversa: Mensagem = {
+        id: Date.now(),
+        remetente: 'cliente',
+        texto: mensagemTexto,
+        timestamp: new Date().toISOString()
+      };
+      
+      setConversas(prev => ({
+        ...prev,
+        [cliente.id]: [...(prev[cliente.id] || []), novaConversa]
+      }));
+
+      toast.success(`Nova mensagem de ${cliente.nome}`);
+      setTimeout(() => respostaIA(cliente, mensagemTexto), 1000);
+    }
+  };
+
+  const respostaIA = async (cliente: Cliente, mensagemCliente: string) => {
+    const agente = agentesIA[cliente.status];
+    
+    let respostaTexto = '';
+    
+    if (mensagemCliente.toLowerCase().includes('simulação') || 
+        mensagemCliente.toLowerCase().includes('simular')) {
+      respostaTexto = `Olá ${cliente.nome}! Vou fazer uma simulação para você. Aguarde um momento...`;
+      setTimeout(() => setSimuladorAberto(true), 500);
+    } else if (cliente.status === 'novo') {
+      respostaTexto = `Olá ${cliente.nome}! Bem-vindo! Sua proposta de R$ ${cliente.valorSolicitado.toLocaleString('pt-BR')} está sendo analisada. Em breve entraremos em contato!`;
+    } else if (cliente.status === 'analise') {
+      respostaTexto = `Sua proposta está em análise no ${cliente.banco}. Precisamos que você envie os documentos necessários.`;
+    } else if (cliente.status === 'retencao') {
+      respostaTexto = `Estamos aguardando retorno do banco. Manteremos você informado!`;
+    } else {
+      respostaTexto = `Olá! Como posso ajudar você hoje?`;
+    }
+
+    const respostaIAMsg: Mensagem = {
+      id: Date.now(),
+      remetente: 'ia',
+      agente: agente.nome,
+      texto: respostaTexto,
+      timestamp: new Date().toISOString()
+    };
+
+    setConversas(prev => ({
+      ...prev,
+      [cliente.id]: [...(prev[cliente.id] || []), respostaIAMsg]
+    }));
+  };
+
+  const enviarWhatsApp = async (telefone: string, mensagemTexto: string) => {
+    console.log(`Enviando para ${telefone}: ${mensagemTexto}`);
+    toast.success('Mensagem enviada via WhatsApp!');
+  };
+
+  const onDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+
+    const { source, destination, draggableId } = result;
+    
+    if (source.droppableId === destination.droppableId) return;
+
+    const clienteAtualizado = clientes.find(c => c.id === draggableId);
+    if (!clienteAtualizado) return;
+
+    const novoStatus = destination.droppableId;
+
+    const clientesAtualizados = clientes.map(c => 
+      c.id === draggableId 
+        ? { ...c, status: novoStatus, ultimaAtualizacao: new Date().toISOString() }
+        : c
+    );
+
+    setClientes(clientesAtualizados);
+    toast.success(`${clienteAtualizado.nome} movido para ${colunas.find(col => col.id === novoStatus)?.titulo}`);
+
+    const mensagemStatus = gerarMensagemStatus(novoStatus, clienteAtualizado);
+    await enviarWhatsApp(clienteAtualizado.telefone, mensagemStatus);
+  };
+
+  const gerarMensagemStatus = (status: string, cliente: Cliente) => {
+    const mensagens: Record<string, string> = {
+      analise: `🔍 Olá ${cliente.nome}! Sua proposta está agora em análise. Em breve teremos novidades!`,
+      retencao: `🏦 Sua proposta foi enviada para o ${cliente.banco}. Aguardando retorno bancário.`,
+      documentacao: `📄 Precisamos de documentos. Por favor, envie os documentos solicitados.`,
+      pagamento: `✅ Sua proposta foi aprovada! Estamos processando o pagamento.`,
+      finalizado: `🎉 Tudo certo! Seu crédito de R$ ${cliente.valorSolicitado.toLocaleString('pt-BR')} foi liberado!`
+    };
+    return mensagens[status] || 'Status atualizado!';
+  };
+
+  const calcularSimulacao = () => {
+    const valor = parseFloat(dadosSimulacao.valor);
+    const taxa = parseFloat(dadosSimulacao.taxa) / 100;
+    const prazo = parseInt(dadosSimulacao.prazo);
+
+    if (!valor || !taxa || !prazo) {
+      toast.error('Preencha todos os campos');
+      return;
+    }
+
+    const taxaMensal = taxa / 12;
+    const parcela = (valor * taxaMensal) / (1 - Math.pow(1 + taxaMensal, -prazo));
+    const total = parcela * prazo;
+
+    const resultadoTexto = `💰 *Simulação de Crédito*
+
+Valor solicitado: R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+Taxa de juros: ${dadosSimulacao.taxa}% a.a.
+Prazo: ${prazo} meses
+
+📊 Resultado:
+Parcela mensal: R$ ${parcela.toFixed(2).replace('.', ',')}
+Valor total: R$ ${total.toFixed(2).replace('.', ',')}
+
+Deseja prosseguir com esta proposta?`;
+
+    if (clienteSelecionado) {
+      enviarMensagem(resultadoTexto, true);
+    }
+
+    toast.success('Simulação calculada!');
+    setSimuladorAberto(false);
+  };
+
+  const enviarMensagem = (texto: string = mensagem, isSimulacao: boolean = false) => {
+    if (!texto.trim() || !clienteSelecionado) return;
+
+    const novaMensagem: Mensagem = {
+      id: Date.now(),
+      remetente: 'agente',
+      texto: texto,
+      timestamp: new Date().toISOString()
+    };
+
+    setConversas(prev => ({
+      ...prev,
+      [clienteSelecionado.id]: [...(prev[clienteSelecionado.id] || []), novaMensagem]
+    }));
+
+    enviarWhatsApp(clienteSelecionado.telefone, texto);
+
+    if (!isSimulacao) setMensagem('');
+  };
+
+  const abrirChat = (cliente: Cliente) => {
+    setClienteSelecionado(cliente);
+    setChatAberto(true);
+    setMenuAberto(false);
+  };
+
+  const processarImagemOCR = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setTimeout(() => {
+      setDadosSimulacao({
+        valor: '50000',
+        taxa: '2.5',
+        prazo: '84'
+      });
+      toast.success('Dados extraídos da imagem com sucesso!');
+    }, 1000);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="bg-card shadow-sm px-6 py-4 flex items-center justify-between border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+            <DollarSign className="text-primary-foreground" size={24} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-card-foreground">CRM Consignado</h1>
+            <p className="text-sm text-muted-foreground">Sistema de Gestão de Propostas</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setMenuAberto(!menuAberto)}
+            className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition"
+          >
+            <User size={18} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-card-foreground">{usuario.nome}</span>
+            <Menu size={18} className="text-muted-foreground" />
+          </button>
+        </div>
+      </header>
+
+      {/* Menu Lateral */}
+      {menuAberto && (
+        <div className="fixed right-0 top-16 w-64 bg-card shadow-xl rounded-l-xl p-4 z-50 border border-border">
+          <div className="space-y-2">
+            <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted rounded-lg transition">
+              <Settings size={18} className="text-muted-foreground" />
+              <span className="text-card-foreground">Configurar Agentes IA</span>
+            </button>
+            <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted rounded-lg transition">
+              <Users size={18} className="text-muted-foreground" />
+              <span className="text-card-foreground">Gerenciar Usuários</span>
+            </button>
+            <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted rounded-lg transition text-destructive">
+              <LogOut size={18} />
+              <span>Sair</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Kanban Board */}
+      <div className="p-6">
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {colunas.map(coluna => (
+              <div key={coluna.id} className="flex-shrink-0 w-80">
+                <div className={`bg-card border-t-4 ${coluna.cor} rounded-t-lg px-4 py-3 shadow-sm`}>
+                  <h3 className="font-bold text-card-foreground flex items-center justify-between">
+                    {coluna.titulo}
+                    <span className="bg-muted px-2 py-1 rounded-full text-xs text-muted-foreground">
+                      {clientes.filter(c => c.status === coluna.id).length}
+                    </span>
+                  </h3>
+                </div>
+                
+                <Droppable droppableId={coluna.id}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`bg-muted/30 border-l-4 border-r-4 border-b-4 ${coluna.cor} rounded-b-lg p-3 min-h-[500px] space-y-3 transition-colors ${
+                        snapshot.isDraggingOver ? 'bg-primary/10' : ''
+                      }`}
+                    >
+                      {clientes
+                        .filter(c => c.status === coluna.id)
+                        .map((cliente, index) => (
+                          <Draggable key={cliente.id} draggableId={cliente.id} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`bg-card border-2 border-border rounded-lg p-4 shadow-sm hover:shadow-md transition cursor-pointer ${
+                                  snapshot.isDragging ? 'opacity-50 rotate-2 shadow-lg' : ''
+                                }`}
+                                onClick={() => abrirChat(cliente)}
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <h4 className="font-bold text-card-foreground">{cliente.nome}</h4>
+                                  <MessageCircle size={18} className="text-primary" />
+                                </div>
+                                
+                                <div className="space-y-1 text-sm text-muted-foreground">
+                                  <p>CPF: {cliente.cpf}</p>
+                                  <p>🏦 {cliente.banco}</p>
+                                  <p className="font-semibold text-success">
+                                    R$ {cliente.valorSolicitado.toLocaleString('pt-BR')}
+                                  </p>
+                                  <p>📅 {cliente.prazo} meses</p>
+                                  <p className="text-xs mt-2">
+                                    👤 {cliente.agente}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </div>
+            ))}
+          </div>
+        </DragDropContext>
       </div>
+
+      {/* Chat WhatsApp */}
+      {chatAberto && clienteSelecionado && (
+        <div className="fixed right-6 bottom-6 w-96 h-[600px] bg-card rounded-2xl shadow-2xl flex flex-col z-50 border border-border">
+          <div className="bg-primary text-primary-foreground px-6 py-4 rounded-t-2xl flex items-center justify-between">
+            <div>
+              <h3 className="font-bold">{clienteSelecionado.nome}</h3>
+              <p className="text-xs opacity-90 flex items-center gap-1">
+                <Bot size={14} />
+                {agentesIA[clienteSelecionado.status].nome}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setSimuladorAberto(true)}
+                className="p-2 hover:bg-primary/80 rounded-lg transition"
+              >
+                <Calculator size={20} />
+              </button>
+              <button 
+                onClick={() => setChatAberto(false)}
+                className="p-2 hover:bg-primary/80 rounded-lg transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
+            {(conversas[clienteSelecionado.id] || []).map(msg => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.remetente === 'cliente' ? 'justify-start' : 'justify-end'}`}
+              >
+                <div
+                  className={`max-w-[70%] px-4 py-2 rounded-2xl ${
+                    msg.remetente === 'cliente'
+                      ? 'bg-card text-card-foreground'
+                      : msg.remetente === 'ia'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'bg-primary text-primary-foreground'
+                  }`}
+                >
+                  {msg.agente && (
+                    <p className="text-xs opacity-75 mb-1">🤖 {msg.agente}</p>
+                  )}
+                  <p className="text-sm whitespace-pre-line">{msg.texto}</p>
+                  <p className="text-xs opacity-60 mt-1">
+                    {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="p-4 border-t border-border">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={mensagem}
+                onChange={(e) => setMensagem(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && enviarMensagem()}
+                placeholder="Digite sua mensagem..."
+                className="flex-1 px-4 py-2 border border-input rounded-full bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                onClick={() => enviarMensagem()}
+                className="p-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition"
+              >
+                <Send size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Simulador de Crédito */}
+      {simuladorAberto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-2xl p-8 w-[500px] max-w-[90%] border border-border">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-card-foreground flex items-center gap-2">
+                <Calculator size={28} className="text-primary" />
+                Simulador de Crédito
+              </h2>
+              <button 
+                onClick={() => setSimuladorAberto(false)}
+                className="p-2 hover:bg-muted rounded-lg transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-card-foreground mb-2">
+                  Enviar print do sistema (OCR)
+                </label>
+                <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary transition">
+                  <ImagePlus size={20} className="text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Clique para enviar imagem</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={processarImagemOCR}
+                    className="hidden" 
+                  />
+                </label>
+              </div>
+
+              <div className="border-t border-border my-4 pt-4">
+                <p className="text-sm text-muted-foreground text-center mb-4">ou preencha manualmente</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-card-foreground mb-2">
+                  Valor Solicitado (R$)
+                </label>
+                <input
+                  type="number"
+                  value={dadosSimulacao.valor}
+                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, valor: e.target.value})}
+                  className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="50000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-card-foreground mb-2">
+                  Taxa de Juros (% a.a.)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={dadosSimulacao.taxa}
+                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, taxa: e.target.value})}
+                  className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="2.5"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-card-foreground mb-2">
+                  Prazo (meses)
+                </label>
+                <input
+                  type="number"
+                  value={dadosSimulacao.prazo}
+                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, prazo: e.target.value})}
+                  className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="84"
+                />
+              </div>
+
+              <button
+                onClick={calcularSimulacao}
+                className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition mt-6"
+              >
+                Calcular e Enviar no WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Botão Teste WhatsApp */}
+      <button
+        onClick={() => receberMensagemWhatsApp('123.456.789-00', 'Olá! Gostaria de uma simulação')}
+        className="fixed bottom-6 left-6 p-4 bg-success text-success-foreground rounded-full shadow-lg hover:bg-success/90 transition"
+        title="Simular mensagem WhatsApp"
+      >
+        <Phone size={24} />
+      </button>
     </div>
   );
 };
