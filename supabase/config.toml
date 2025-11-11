@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.gptmaker-chat]
 verify_jwt = false
+
+[functions.gptmaker-webhook]
+verify_jwt = false

@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      whatsapp_messages: {
+        Row: {
+          agente_nome: string | null
+          cliente_cpf: string
+          cliente_nome: string | null
+          cliente_telefone: string
+          created_at: string
+          id: string
+          remetente: string
+          texto: string
+          updated_at: string
+        }
+        Insert: {
+          agente_nome?: string | null
+          cliente_cpf: string
+          cliente_nome?: string | null
+          cliente_telefone: string
+          created_at?: string
+          id?: string
+          remetente: string
+          texto: string
+          updated_at?: string
+        }
+        Update: {
+          agente_nome?: string | null
+          cliente_cpf?: string
+          cliente_nome?: string | null
+          cliente_telefone?: string
+          created_at?: string
+          id?: string
+          remetente?: string
+          texto?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

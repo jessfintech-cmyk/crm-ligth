@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Cliente {
   id: string;
@@ -159,6 +160,90 @@ const Index = () => {
     nome: 'Administrador',
     tipo: 'admin'
   });
+
+  // Carregar mensagens do banco de dados e escutar realtime
+  useEffect(() => {
+    const carregarMensagens = async () => {
+      const { data, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar mensagens:', error);
+        return;
+      }
+
+      if (data) {
+        // Agrupar mensagens por CPF do cliente
+        const mensagensPorCliente: Record<string, Mensagem[]> = {};
+        
+        data.forEach((msg) => {
+          // Encontrar cliente pelo CPF
+          const cliente = clientes.find(c => c.cpf === msg.cliente_cpf);
+          if (cliente) {
+            if (!mensagensPorCliente[cliente.id]) {
+              mensagensPorCliente[cliente.id] = [];
+            }
+            mensagensPorCliente[cliente.id].push({
+              id: Date.now() + Math.random(),
+              remetente: msg.remetente as 'cliente' | 'ia' | 'agente',
+              texto: msg.texto,
+              timestamp: msg.created_at,
+              agente: msg.agente_nome || undefined
+            });
+          }
+        });
+
+        setConversas(mensagensPorCliente);
+      }
+    };
+
+    carregarMensagens();
+
+    // Escutar novas mensagens em tempo real
+    const channel = supabase
+      .channel('whatsapp_messages_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'whatsapp_messages'
+        },
+        (payload) => {
+          console.log('Nova mensagem recebida:', payload);
+          const novaMensagem = payload.new;
+          
+          // Encontrar cliente pelo CPF
+          const cliente = clientes.find(c => c.cpf === novaMensagem.cliente_cpf);
+          if (cliente) {
+            const mensagemFormatada: Mensagem = {
+              id: Date.now() + Math.random(),
+              remetente: novaMensagem.remetente as 'cliente' | 'ia' | 'agente',
+              texto: novaMensagem.texto,
+              timestamp: novaMensagem.created_at,
+              agente: novaMensagem.agente_nome || undefined
+            };
+
+            setConversas(prev => ({
+              ...prev,
+              [cliente.id]: [...(prev[cliente.id] || []), mensagemFormatada]
+            }));
+
+            // Mostrar notificação se for mensagem do cliente
+            if (novaMensagem.remetente === 'cliente') {
+              toast.success(`Nova mensagem de ${cliente.nome}`);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clientes]);
 
   const buscarCliente = (texto: string) => {
     return clientes.find(c => 
