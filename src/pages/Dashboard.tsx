@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
-import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users } from 'lucide-react';
+import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users, Moon, Sun } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import MessageTags from '@/components/MessageTags';
 import TagFilter from '@/components/TagFilter';
+import { useNavigate } from 'react-router-dom';
+import { User as SupabaseUser, Session } from '@supabase/supabase-js';
+import { useTheme } from '@/contexts/ThemeProvider';
+import { Button } from '@/components/ui/button';
 
 interface Cliente {
   id: string;
@@ -142,7 +146,7 @@ const agentesIA: Record<string, { nome: string; prompt: string; personalidade: s
   }
 };
 
-const Index = () => {
+const Dashboard = () => {
   const [clientes, setClientes] = useState<Cliente[]>(initialClients);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [chatAberto, setChatAberto] = useState(false);
@@ -165,6 +169,35 @@ const Index = () => {
   });
   const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
   const [clientesFiltrados, setClientesFiltrados] = useState<Cliente[]>(clientes);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
+
+  // Verificar autenticação
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (!session?.user) {
+          navigate('/auth');
+        }
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session?.user) {
+        navigate('/auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
 
   // Carregar mensagens do banco de dados e escutar realtime
   useEffect(() => {
@@ -597,6 +630,18 @@ Deseja prosseguir com esta proposta?`;
         </div>
         
         <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="rounded-full"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-5 w-5" />
+            ) : (
+              <Moon className="h-5 w-5" />
+            )}
+          </Button>
           <button 
             onClick={() => setMenuAberto(!menuAberto)}
             className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition"
@@ -620,7 +665,14 @@ Deseja prosseguir com esta proposta?`;
               <Users size={18} className="text-muted-foreground" />
               <span className="text-card-foreground">Gerenciar Usuários</span>
             </button>
-            <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted rounded-lg transition text-destructive">
+            <button 
+              onClick={async () => {
+                await supabase.auth.signOut();
+                navigate('/auth');
+                toast.success('Logout realizado com sucesso');
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted rounded-lg transition text-destructive"
+            >
               <LogOut size={18} />
               <span>Sair</span>
             </button>
@@ -950,4 +1002,4 @@ Deseja prosseguir com esta proposta?`;
   );
 };
 
-export default Index;
+export default Dashboard;
