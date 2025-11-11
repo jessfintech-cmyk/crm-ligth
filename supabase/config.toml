@@ -2,3 +2,6 @@ project_id = "exjmsrcyoyyspmuoqono"
 
 [functions.ai-chat]
 verify_jwt = false
+
+[functions.gptmaker-chat]
+verify_jwt = false

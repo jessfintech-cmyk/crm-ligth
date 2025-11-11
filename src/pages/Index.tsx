@@ -209,21 +209,10 @@ const Index = () => {
     }
 
     try {
-      // Buscar histórico de mensagens do cliente
-      const historicoConversa = conversas[cliente.id] || [];
-      const mensagensParaIA = historicoConversa.map(msg => ({
-        role: msg.remetente === 'cliente' ? 'user' : 'assistant',
-        content: msg.texto
-      }));
+      const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-chat`;
 
-      // Adicionar a mensagem atual
-      mensagensParaIA.push({
-        role: 'user',
-        content: mensagemCliente
-      });
-
-      const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
-
+      console.log('Enviando mensagem para GPT Maker...');
+      
       const response = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -231,30 +220,26 @@ const Index = () => {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
-          messages: mensagensParaIA,
-          status: cliente.status,
-          clientName: cliente.nome,
-          valorSolicitado: cliente.valorSolicitado.toLocaleString('pt-BR'),
-          banco: cliente.banco
+          prompt: mensagemCliente,
+          contextId: cliente.cpf,
+          chatName: cliente.nome,
+          phone: cliente.telefone
         }),
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error('Erro ao conectar com IA');
+      if (!response.ok) {
+        throw new Error('Erro ao conectar com GPT Maker');
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = '';
-      let streamDone = false;
-      let respostaCompleta = '';
+      const data = await response.json();
+      console.log('Resposta recebida:', data);
 
-      // Criar mensagem inicial vazia
+      // Criar mensagem com a resposta do GPT Maker
       const respostaIAMsg: Mensagem = {
         id: Date.now(),
         remetente: 'ia',
         agente: agente.nome,
-        texto: '',
+        texto: data.message || 'Desculpe, não consegui processar sua mensagem.',
         timestamp: new Date().toISOString()
       };
 
@@ -263,54 +248,37 @@ const Index = () => {
         [cliente.id]: [...(prev[cliente.id] || []), respostaIAMsg]
       }));
 
-      while (!streamDone) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
+      // Se houver imagens ou áudios, adicionar como mensagens separadas
+      if (data.images && data.images.length > 0) {
+        data.images.forEach((imageUrl: string, index: number) => {
+          const imagemMsg: Mensagem = {
+            id: Date.now() + index + 1,
+            remetente: 'ia',
+            agente: agente.nome,
+            texto: `📷 [Imagem: ${imageUrl}]`,
+            timestamp: new Date().toISOString()
+          };
+          setConversas(prev => ({
+            ...prev,
+            [cliente.id]: [...(prev[cliente.id] || []), imagemMsg]
+          }));
+        });
+      }
 
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (line.startsWith(':') || line.trim() === '') continue;
-          if (!line.startsWith('data: ')) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') {
-            streamDone = true;
-            break;
-          }
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              respostaCompleta += content;
-              
-              // Atualizar a última mensagem da IA
-              setConversas(prev => {
-                const conversaAtual = prev[cliente.id] || [];
-                const ultimaMensagem = conversaAtual[conversaAtual.length - 1];
-                
-                if (ultimaMensagem && ultimaMensagem.remetente === 'ia') {
-                  return {
-                    ...prev,
-                    [cliente.id]: [
-                      ...conversaAtual.slice(0, -1),
-                      { ...ultimaMensagem, texto: respostaCompleta }
-                    ]
-                  };
-                }
-                return prev;
-              });
-            }
-          } catch {
-            textBuffer = line + '\n' + textBuffer;
-            break;
-          }
-        }
+      if (data.audios && data.audios.length > 0) {
+        data.audios.forEach((audioUrl: string, index: number) => {
+          const audioMsg: Mensagem = {
+            id: Date.now() + index + 100,
+            remetente: 'ia',
+            agente: agente.nome,
+            texto: `🎵 [Áudio: ${audioUrl}]`,
+            timestamp: new Date().toISOString()
+          };
+          setConversas(prev => ({
+            ...prev,
+            [cliente.id]: [...(prev[cliente.id] || []), audioMsg]
+          }));
+        });
       }
 
     } catch (error) {
@@ -326,6 +294,7 @@ const Index = () => {
         ...prev,
         [cliente.id]: [...(prev[cliente.id] || []), respostaErro]
       }));
+      toast.error('Erro ao conectar com IA');
     }
   };
 
