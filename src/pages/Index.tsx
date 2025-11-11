@@ -72,6 +72,39 @@ const colunas = [
   { id: 'finalizado', titulo: 'Finalizado', cor: 'border-muted' }
 ];
 
+const tiposOperacao = [
+  'Portabilidade com troco',
+  'Portabilidade com redução',
+  'Compra de dívida',
+  'Cartão consignado',
+  'Compra de cartão',
+  'Contrato novo',
+  'Refin'
+];
+
+const bancos = [
+  'Banco do Brasil',
+  'Caixa Econômica',
+  'Bradesco',
+  'Itaú',
+  'Santander',
+  'Banco Inter',
+  'Futuro Previdência',
+  'J17',
+  'Banco Larca',
+  'Banco Hoje Previdência',
+  'Banco BRB',
+  'Banco Barigui',
+  'Banco Pan',
+  'Safra',
+  'C6 Bank',
+  'Nubank',
+  'Original',
+  'BMG',
+  'Daycoval',
+  'Mercantil do Brasil'
+];
+
 const agentesIA: Record<string, { nome: string; prompt: string; personalidade: string }> = {
   novo: {
     nome: 'Agente de Captação',
@@ -113,8 +146,12 @@ const Index = () => {
   const [conversas, setConversas] = useState<Record<string, Mensagem[]>>({});
   const [simuladorAberto, setSimuladorAberto] = useState(false);
   const [dadosSimulacao, setDadosSimulacao] = useState({
-    valor: '',
-    taxa: '',
+    tipoOperacao: 'Contrato novo',
+    bancoAtual: '',
+    bancoOperacao: '',
+    parcela: '',
+    saldoDevedor: '',
+    coeficiente: '',
     prazo: ''
   });
   const [menuAberto, setMenuAberto] = useState(false);
@@ -225,28 +262,66 @@ const Index = () => {
   };
 
   const calcularSimulacao = () => {
-    const valor = parseFloat(dadosSimulacao.valor);
-    const taxa = parseFloat(dadosSimulacao.taxa) / 100;
-    const prazo = parseInt(dadosSimulacao.prazo);
+    const { tipoOperacao, bancoAtual, bancoOperacao, parcela, saldoDevedor, coeficiente, prazo } = dadosSimulacao;
+    
+    const parcelaNum = parseFloat(parcela);
+    const saldoDevedorNum = parseFloat(saldoDevedor || '0');
+    const coeficienteNum = parseFloat(coeficiente);
+    const prazoNum = parseInt(prazo);
 
-    if (!valor || !taxa || !prazo) {
-      toast.error('Preencha todos os campos');
+    if (!tipoOperacao || !parcela || !coeficiente || !prazo) {
+      toast.error('Preencha os campos obrigatórios');
       return;
     }
 
-    const taxaMensal = taxa / 12;
-    const parcela = (valor * taxaMensal) / (1 - Math.pow(1 + taxaMensal, -prazo));
-    const total = parcela * prazo;
+    let valorLiberado = 0;
+    let totalOperacao = 0;
+    let observacao = '';
+
+    // Operações que exigem saldo devedor
+    const operacoesComSaldoDevedor = [
+      'Portabilidade com troco',
+      'Portabilidade com redução',
+      'Compra de dívida'
+    ];
+
+    if (operacoesComSaldoDevedor.includes(tipoOperacao)) {
+      if (!saldoDevedor || !bancoAtual) {
+        toast.error('Para esta operação, informe o saldo devedor e banco atual');
+        return;
+      }
+      
+      // Total da operação = parcela * coeficiente
+      totalOperacao = parcelaNum * coeficienteNum;
+      
+      // Valor líquido liberado = total - saldo devedor
+      valorLiberado = totalOperacao - saldoDevedorNum;
+      
+      observacao = `Total da operação: R$ ${totalOperacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+Saldo devedor quitado: R$ ${saldoDevedorNum.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    } else {
+      // Contrato novo, refin, cartões
+      // Valor liberado = parcela * coeficiente
+      valorLiberado = parcelaNum * coeficienteNum;
+      totalOperacao = valorLiberado;
+      
+      observacao = `Total da operação: R$ ${totalOperacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    }
 
     const resultadoTexto = `💰 *Simulação de Crédito*
 
-Valor solicitado: R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-Taxa de juros: ${dadosSimulacao.taxa}% a.a.
-Prazo: ${prazo} meses
+📋 Tipo: ${tipoOperacao}
+${bancoAtual ? `🏦 Banco atual: ${bancoAtual}` : ''}
+${bancoOperacao ? `🏦 Banco da operação: ${bancoOperacao}` : ''}
 
-📊 Resultado:
-Parcela mensal: R$ ${parcela.toFixed(2).replace('.', ',')}
-Valor total: R$ ${total.toFixed(2).replace('.', ',')}
+📊 Dados:
+Parcela: R$ ${parcelaNum.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+Coeficiente: ${coeficienteNum}
+Prazo: ${prazoNum} meses
+
+💵 Resultado:
+${observacao}
+💰 Valor líquido liberado: R$ ${valorLiberado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
 
 Deseja prosseguir com esta proposta?`;
 
@@ -288,14 +363,18 @@ Deseja prosseguir com esta proposta?`;
     const file = e.target.files?.[0];
     if (!file) return;
 
+    toast.info('Processando imagem...');
+    
     setTimeout(() => {
-      setDadosSimulacao({
-        valor: '50000',
-        taxa: '2.5',
+      setDadosSimulacao(prev => ({
+        ...prev,
+        parcela: '1250.00',
+        saldoDevedor: '15000.00',
+        coeficiente: '45.5',
         prazo: '84'
-      });
-      toast.success('Dados extraídos da imagem com sucesso!');
-    }, 1000);
+      }));
+      toast.success('Dados extraídos: Parcela e Saldo Devedor identificados!');
+    }, 1500);
   };
 
   return (
@@ -514,7 +593,7 @@ Deseja prosseguir com esta proposta?`;
                 </label>
                 <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary transition">
                   <ImagePlus size={20} className="text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Clique para enviar imagem</span>
+                  <span className="text-sm text-muted-foreground">Clique para enviar imagem (extrai parcela e saldo)</span>
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -530,42 +609,112 @@ Deseja prosseguir com esta proposta?`;
 
               <div>
                 <label className="block text-sm font-medium text-card-foreground mb-2">
-                  Valor Solicitado (R$)
+                  Tipo de Operação *
                 </label>
-                <input
-                  type="number"
-                  value={dadosSimulacao.valor}
-                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, valor: e.target.value})}
+                <select
+                  value={dadosSimulacao.tipoOperacao}
+                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, tipoOperacao: e.target.value})}
                   className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="50000"
-                />
+                >
+                  {tiposOperacao.map(tipo => (
+                    <option key={tipo} value={tipo}>{tipo}</option>
+                  ))}
+                </select>
               </div>
+
+              {['Portabilidade com troco', 'Portabilidade com redução', 'Compra de dívida'].includes(dadosSimulacao.tipoOperacao) && (
+                <div>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
+                    Banco Atual *
+                  </label>
+                  <select
+                    value={dadosSimulacao.bancoAtual}
+                    onChange={(e) => setDadosSimulacao({...dadosSimulacao, bancoAtual: e.target.value})}
+                    className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Selecione o banco</option>
+                    {bancos.map(banco => (
+                      <option key={banco} value={banco}>{banco}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-card-foreground mb-2">
-                  Taxa de Juros (% a.a.)
+                  Banco da Operação
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={dadosSimulacao.taxa}
-                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, taxa: e.target.value})}
+                <select
+                  value={dadosSimulacao.bancoOperacao}
+                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, bancoOperacao: e.target.value})}
                   className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="2.5"
-                />
+                >
+                  <option value="">Selecione o banco</option>
+                  {bancos.map(banco => (
+                    <option key={banco} value={banco}>{banco}</option>
+                  ))}
+                </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-card-foreground mb-2">
-                  Prazo (meses)
-                </label>
-                <input
-                  type="number"
-                  value={dadosSimulacao.prazo}
-                  onChange={(e) => setDadosSimulacao({...dadosSimulacao, prazo: e.target.value})}
-                  className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="84"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
+                    Parcela (R$) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={dadosSimulacao.parcela}
+                    onChange={(e) => setDadosSimulacao({...dadosSimulacao, parcela: e.target.value})}
+                    className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="1250.00"
+                  />
+                </div>
+
+                {['Portabilidade com troco', 'Portabilidade com redução', 'Compra de dívida'].includes(dadosSimulacao.tipoOperacao) && (
+                  <div>
+                    <label className="block text-sm font-medium text-card-foreground mb-2">
+                      Saldo Devedor (R$) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={dadosSimulacao.saldoDevedor}
+                      onChange={(e) => setDadosSimulacao({...dadosSimulacao, saldoDevedor: e.target.value})}
+                      className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="15000.00"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
+                    Coeficiente *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={dadosSimulacao.coeficiente}
+                    onChange={(e) => setDadosSimulacao({...dadosSimulacao, coeficiente: e.target.value})}
+                    className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="45.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
+                    Prazo (meses) *
+                  </label>
+                  <input
+                    type="number"
+                    value={dadosSimulacao.prazo}
+                    onChange={(e) => setDadosSimulacao({...dadosSimulacao, prazo: e.target.value})}
+                    className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="84"
+                  />
+                </div>
               </div>
 
               <button
