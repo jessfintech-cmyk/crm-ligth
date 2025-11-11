@@ -11,6 +11,7 @@ import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -126,6 +127,35 @@ const Auth = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email) {
+      toast.error('Por favor, informe seu email');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success('Email de recuperação enviado! Verifique sua caixa de entrada.');
+        setIsForgotPassword(false);
+        setEmail('');
+      }
+    } catch (error) {
+      toast.error('Erro ao enviar email. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex items-center justify-center p-6">
       <div className="absolute top-6 right-6">
@@ -156,17 +186,19 @@ const Auth = () => {
         <div className="bg-card border border-border rounded-2xl p-8 shadow-xl">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-card-foreground mb-2">
-              {isLogin ? 'Bem-vindo de volta' : 'Criar conta'}
+              {isForgotPassword ? 'Recuperar senha' : (isLogin ? 'Bem-vindo de volta' : 'Criar conta')}
             </h1>
             <p className="text-muted-foreground">
-              {isLogin 
-                ? 'Entre com suas credenciais para continuar' 
-                : 'Preencha os dados para começar'}
+              {isForgotPassword 
+                ? 'Digite seu email para receber o link de recuperação'
+                : (isLogin 
+                  ? 'Entre com suas credenciais para continuar' 
+                  : 'Preencha os dados para começar')}
             </p>
           </div>
 
-          <form onSubmit={isLogin ? handleSignIn : handleSignUp} className="space-y-4">
-            {!isLogin && (
+          <form onSubmit={isForgotPassword ? handleForgotPassword : (isLogin ? handleSignIn : handleSignUp)} className="space-y-4">
+            {!isLogin && !isForgotPassword && (
               <div>
                 <Label htmlFor="name" className="text-card-foreground">
                   Nome
@@ -203,43 +235,63 @@ const Auth = () => {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="password" className="text-card-foreground">
-                Senha
-              </Label>
-              <div className="relative mt-1">
-                <Lock className="absolute left-3 top-3 text-muted-foreground" size={18} />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="pl-10"
-                  minLength={6}
-                />
+            {!isForgotPassword && (
+              <div>
+                <Label htmlFor="password" className="text-card-foreground">
+                  Senha
+                </Label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-3 text-muted-foreground" size={18} />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="pl-10"
+                    minLength={6}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Carregando...' : (isLogin ? 'Entrar' : 'Criar Conta')}
+              {loading ? 'Carregando...' : (isForgotPassword ? 'Enviar Link de Recuperação' : (isLogin ? 'Entrar' : 'Criar Conta'))}
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-3">
+            {!isForgotPassword && isLogin && (
+              <button
+                onClick={() => {
+                  setIsForgotPassword(true);
+                  setPassword('');
+                }}
+                className="block w-full text-sm text-muted-foreground hover:text-foreground"
+              >
+                Esqueceu sua senha?
+              </button>
+            )}
+            
             <button
               onClick={() => {
-                setIsLogin(!isLogin);
+                if (isForgotPassword) {
+                  setIsForgotPassword(false);
+                } else {
+                  setIsLogin(!isLogin);
+                }
                 setEmail('');
                 setPassword('');
                 setName('');
               }}
               className="text-sm text-primary hover:underline"
             >
-              {isLogin 
-                ? 'Não tem uma conta? Cadastre-se' 
-                : 'Já tem uma conta? Faça login'}
+              {isForgotPassword 
+                ? '← Voltar para login'
+                : (isLogin 
+                  ? 'Não tem uma conta? Cadastre-se' 
+                  : 'Já tem uma conta? Faça login')}
             </button>
           </div>
         </div>
