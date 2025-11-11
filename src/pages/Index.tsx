@@ -190,34 +190,143 @@ const Index = () => {
   const respostaIA = async (cliente: Cliente, mensagemCliente: string) => {
     const agente = agentesIA[cliente.status];
     
-    let respostaTexto = '';
-    
+    // Verificar se pede simulação
     if (mensagemCliente.toLowerCase().includes('simulação') || 
         mensagemCliente.toLowerCase().includes('simular')) {
-      respostaTexto = `Olá ${cliente.nome}! Vou fazer uma simulação para você. Aguarde um momento...`;
+      const respostaSimulacao: Mensagem = {
+        id: Date.now(),
+        remetente: 'ia',
+        agente: agente.nome,
+        texto: `Olá ${cliente.nome}! Vou fazer uma simulação para você. Aguarde um momento...`,
+        timestamp: new Date().toISOString()
+      };
+      setConversas(prev => ({
+        ...prev,
+        [cliente.id]: [...(prev[cliente.id] || []), respostaSimulacao]
+      }));
       setTimeout(() => setSimuladorAberto(true), 500);
-    } else if (cliente.status === 'novo') {
-      respostaTexto = `Olá ${cliente.nome}! Bem-vindo! Sua proposta de R$ ${cliente.valorSolicitado.toLocaleString('pt-BR')} está sendo analisada. Em breve entraremos em contato!`;
-    } else if (cliente.status === 'analise') {
-      respostaTexto = `Sua proposta está em análise no ${cliente.banco}. Precisamos que você envie os documentos necessários.`;
-    } else if (cliente.status === 'retencao') {
-      respostaTexto = `Estamos aguardando retorno do banco. Manteremos você informado!`;
-    } else {
-      respostaTexto = `Olá! Como posso ajudar você hoje?`;
+      return;
     }
 
-    const respostaIAMsg: Mensagem = {
-      id: Date.now(),
-      remetente: 'ia',
-      agente: agente.nome,
-      texto: respostaTexto,
-      timestamp: new Date().toISOString()
-    };
+    try {
+      // Buscar histórico de mensagens do cliente
+      const historicoConversa = conversas[cliente.id] || [];
+      const mensagensParaIA = historicoConversa.map(msg => ({
+        role: msg.remetente === 'cliente' ? 'user' : 'assistant',
+        content: msg.texto
+      }));
 
-    setConversas(prev => ({
-      ...prev,
-      [cliente.id]: [...(prev[cliente.id] || []), respostaIAMsg]
-    }));
+      // Adicionar a mensagem atual
+      mensagensParaIA.push({
+        role: 'user',
+        content: mensagemCliente
+      });
+
+      const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+
+      const response = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          messages: mensagensParaIA,
+          status: cliente.status,
+          clientName: cliente.nome,
+          valorSolicitado: cliente.valorSolicitado.toLocaleString('pt-BR'),
+          banco: cliente.banco
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Erro ao conectar com IA');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = '';
+      let streamDone = false;
+      let respostaCompleta = '';
+
+      // Criar mensagem inicial vazia
+      const respostaIAMsg: Mensagem = {
+        id: Date.now(),
+        remetente: 'ia',
+        agente: agente.nome,
+        texto: '',
+        timestamp: new Date().toISOString()
+      };
+
+      setConversas(prev => ({
+        ...prev,
+        [cliente.id]: [...(prev[cliente.id] || []), respostaIAMsg]
+      }));
+
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (line.startsWith(':') || line.trim() === '') continue;
+          if (!line.startsWith('data: ')) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') {
+            streamDone = true;
+            break;
+          }
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              respostaCompleta += content;
+              
+              // Atualizar a última mensagem da IA
+              setConversas(prev => {
+                const conversaAtual = prev[cliente.id] || [];
+                const ultimaMensagem = conversaAtual[conversaAtual.length - 1];
+                
+                if (ultimaMensagem && ultimaMensagem.remetente === 'ia') {
+                  return {
+                    ...prev,
+                    [cliente.id]: [
+                      ...conversaAtual.slice(0, -1),
+                      { ...ultimaMensagem, texto: respostaCompleta }
+                    ]
+                  };
+                }
+                return prev;
+              });
+            }
+          } catch {
+            textBuffer = line + '\n' + textBuffer;
+            break;
+          }
+        }
+      }
+
+    } catch (error) {
+      console.error('Erro ao gerar resposta IA:', error);
+      const respostaErro: Mensagem = {
+        id: Date.now(),
+        remetente: 'ia',
+        agente: agente.nome,
+        texto: 'Desculpe, tive um problema ao processar sua mensagem. Por favor, tente novamente.',
+        timestamp: new Date().toISOString()
+      };
+      setConversas(prev => ({
+        ...prev,
+        [cliente.id]: [...(prev[cliente.id] || []), respostaErro]
+      }));
+    }
   };
 
   const enviarWhatsApp = async (telefone: string, mensagemTexto: string) => {
