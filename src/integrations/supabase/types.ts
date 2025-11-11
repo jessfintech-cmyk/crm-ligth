@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      message_tags: {
+        Row: {
+          confianca: number | null
+          created_at: string
+          id: string
+          message_id: string
+          tag_id: string
+        }
+        Insert: {
+          confianca?: number | null
+          created_at?: string
+          id?: string
+          message_id: string
+          tag_id: string
+        }
+        Update: {
+          confianca?: number | null
+          created_at?: string
+          id?: string
+          message_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_tags_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tags: {
+        Row: {
+          cor: string
+          created_at: string
+          id: string
+          nome: string
+        }
+        Insert: {
+          cor?: string
+          created_at?: string
+          id?: string
+          nome: string
+        }
+        Update: {
+          cor?: string
+          created_at?: string
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
       whatsapp_messages: {
         Row: {
           agente_nome: string | null

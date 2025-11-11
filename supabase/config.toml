@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.gptmaker-webhook]
 verify_jwt = false
+
+[functions.categorize-message]
+verify_jwt = false

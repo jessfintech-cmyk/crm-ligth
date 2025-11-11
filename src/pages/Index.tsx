@@ -3,6 +3,8 @@ import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautif
 import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import MessageTags from '@/components/MessageTags';
+import TagFilter from '@/components/TagFilter';
 
 interface Cliente {
   id: string;
@@ -19,6 +21,7 @@ interface Cliente {
 
 interface Mensagem {
   id: number;
+  messageId?: string; // ID do banco de dados para buscar tags
   remetente: 'cliente' | 'ia' | 'agente';
   texto: string;
   timestamp: string;
@@ -160,6 +163,8 @@ const Index = () => {
     nome: 'Administrador',
     tipo: 'admin'
   });
+  const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
+  const [clientesFiltrados, setClientesFiltrados] = useState<Cliente[]>(clientes);
 
   // Carregar mensagens do banco de dados e escutar realtime
   useEffect(() => {
@@ -187,6 +192,7 @@ const Index = () => {
             }
             mensagensPorCliente[cliente.id].push({
               id: Date.now() + Math.random(),
+              messageId: msg.id, // ID do banco para buscar tags
               remetente: msg.remetente as 'cliente' | 'ia' | 'agente',
               texto: msg.texto,
               timestamp: msg.created_at,
@@ -220,6 +226,7 @@ const Index = () => {
           if (cliente) {
             const mensagemFormatada: Mensagem = {
               id: Date.now() + Math.random(),
+              messageId: novaMensagem.id, // ID do banco para buscar tags
               remetente: novaMensagem.remetente as 'cliente' | 'ia' | 'agente',
               texto: novaMensagem.texto,
               timestamp: novaMensagem.created_at,
@@ -244,6 +251,41 @@ const Index = () => {
       supabase.removeChannel(channel);
     };
   }, [clientes]);
+
+  // Filtrar clientes por tags
+  useEffect(() => {
+    const filtrarClientes = async () => {
+      if (tagsFiltro.length === 0) {
+        setClientesFiltrados(clientes);
+        return;
+      }
+
+      // Buscar mensagens que têm as tags selecionadas
+      const { data: messageTags, error } = await supabase
+        .from('message_tags')
+        .select('message_id, whatsapp_messages(cliente_cpf)')
+        .in('tag_id', tagsFiltro);
+
+      if (error) {
+        console.error('Erro ao filtrar por tags:', error);
+        return;
+      }
+
+      // Extrair CPFs únicos
+      const cpfsComTags = new Set<string>();
+      messageTags?.forEach((mt: any) => {
+        if (mt.whatsapp_messages?.cliente_cpf) {
+          cpfsComTags.add(mt.whatsapp_messages.cliente_cpf);
+        }
+      });
+
+      // Filtrar clientes que têm esses CPFs
+      const clientesFiltrados = clientes.filter(c => cpfsComTags.has(c.cpf));
+      setClientesFiltrados(clientesFiltrados);
+    };
+
+    filtrarClientes();
+  }, [tagsFiltro, clientes]);
 
   const buscarCliente = (texto: string) => {
     return clientes.find(c => 
@@ -588,6 +630,9 @@ Deseja prosseguir com esta proposta?`;
 
       {/* Kanban Board */}
       <div className="p-6">
+        <div className="mb-4">
+          <TagFilter onTagsChange={setTagsFiltro} />
+        </div>
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-4 overflow-x-auto pb-4">
             {colunas.map(coluna => (
@@ -596,7 +641,7 @@ Deseja prosseguir com esta proposta?`;
                   <h3 className="font-bold text-card-foreground flex items-center justify-between">
                     {coluna.titulo}
                     <span className="bg-muted px-2 py-1 rounded-full text-xs text-muted-foreground">
-                      {clientes.filter(c => c.status === coluna.id).length}
+                      {clientesFiltrados.filter(c => c.status === coluna.id).length}
                     </span>
                   </h3>
                 </div>
@@ -610,7 +655,7 @@ Deseja prosseguir com esta proposta?`;
                         snapshot.isDraggingOver ? 'bg-primary/10' : ''
                       }`}
                     >
-                      {clientes
+                      {clientesFiltrados
                         .filter(c => c.status === coluna.id)
                         .map((cliente, index) => (
                           <Draggable key={cliente.id} draggableId={cliente.id} index={index}>
@@ -639,6 +684,7 @@ Deseja prosseguir com esta proposta?`;
                                   <p className="text-xs mt-2">
                                     👤 {cliente.agente}
                                   </p>
+                                  <MessageTags clienteCpf={cliente.cpf} />
                                 </div>
                               </div>
                             )}
@@ -706,6 +752,7 @@ Deseja prosseguir com esta proposta?`;
                       minute: '2-digit' 
                     })}
                   </p>
+                  {msg.messageId && <MessageTags messageId={msg.messageId} />}
                 </div>
               </div>
             ))}

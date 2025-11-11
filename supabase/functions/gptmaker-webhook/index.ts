@@ -37,7 +37,7 @@ serve(async (req) => {
     }
 
     // Salvar mensagem do cliente no banco
-    const { error: insertError } = await supabase
+    const { data: insertData, error: insertError } = await supabase
       .from('whatsapp_messages')
       .insert({
         cliente_cpf: contextId,
@@ -45,7 +45,9 @@ serve(async (req) => {
         cliente_telefone: phone,
         remetente: 'cliente',
         texto: prompt,
-      });
+      })
+      .select('id')
+      .single();
 
     if (insertError) {
       console.error('Erro ao salvar mensagem:', insertError);
@@ -53,6 +55,33 @@ serve(async (req) => {
     }
 
     console.log('Mensagem salva com sucesso');
+
+    // Categorizar mensagem automaticamente em background
+    (async () => {
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/categorize-message`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messageId: insertData.id,
+              messageText: prompt
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Mensagem categorizada:', result);
+        }
+      } catch (error) {
+        console.error('Erro ao categorizar mensagem:', error);
+      }
+    })();
 
     // Enviar resposta automática via GPT Maker em background
     const GPTMAKER_TOKEN = Deno.env.get('GPTMAKER_TOKEN');
