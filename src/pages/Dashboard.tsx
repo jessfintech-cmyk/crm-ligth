@@ -188,6 +188,10 @@ const Dashboard = () => {
   const [session, setSession] = useState<Session | null>(null);
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const [gptMakerChats, setGptMakerChats] = useState<any[]>([]);
+  const [chatsAberto, setChatsAberto] = useState(false);
+  const [conversaSelecionada, setConversaSelecionada] = useState<any>(null);
+  const [mensagensGPT, setMensagensGPT] = useState<any[]>([]);
 
   // Verificar autenticação
   useEffect(() => {
@@ -479,6 +483,113 @@ const Dashboard = () => {
   const enviarWhatsApp = async (telefone: string, mensagemTexto: string) => {
     console.log(`Enviando para ${telefone}: ${mensagemTexto}`);
     toast.success('Mensagem enviada via WhatsApp!');
+  };
+
+  const buscarChatsGPTMaker = async () => {
+    try {
+      toast.info('Carregando conversas do GPT Maker...');
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-chats`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao buscar chats');
+      }
+
+      const data = await response.json();
+      setGptMakerChats(data);
+      setChatsAberto(true);
+      toast.success(`${data.length} conversas encontradas!`);
+    } catch (error) {
+      console.error('Erro ao buscar chats:', error);
+      toast.error('Erro ao carregar conversas do GPT Maker');
+    }
+  };
+
+  const abrirConversaGPT = async (chat: any) => {
+    try {
+      setConversaSelecionada(chat);
+      toast.info('Carregando mensagens...');
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ conversationId: chat.id }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao buscar mensagens');
+      }
+
+      const data = await response.json();
+      setMensagensGPT(data);
+    } catch (error) {
+      console.error('Erro ao buscar mensagens:', error);
+      toast.error('Erro ao carregar mensagens');
+    }
+  };
+
+  const enviarMensagemGPT = async (texto: string) => {
+    if (!texto.trim() || !conversaSelecionada) return;
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-send`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            conversationId: conversaSelecionada.id,
+            message: texto,
+            phone: conversaSelecionada.whatsappPhone,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao enviar mensagem');
+      }
+
+      toast.success('Mensagem enviada!');
+      // Recarregar mensagens
+      await abrirConversaGPT(conversaSelecionada);
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+      toast.error('Erro ao enviar mensagem');
+    }
+  };
+
+  const atualizarStatusCliente = async (chatId: string, novoStatus: string) => {
+    // Buscar cliente pelo chat ID ou telefone
+    const cliente = clientes.find(c => c.id === chatId || c.telefone === chatId);
+    
+    if (cliente && cliente.status !== novoStatus) {
+      const clientesAtualizados = clientes.map(c => 
+        c.id === cliente.id 
+          ? { ...c, status: novoStatus, ultimaAtualizacao: new Date().toISOString() }
+          : c
+      );
+      
+      setClientes(clientesAtualizados);
+      toast.success(`${cliente.nome} movido para ${colunas.find(col => col.id === novoStatus)?.titulo}`);
+    }
   };
 
   const onDragEnd = async (result: DropResult) => {
@@ -1184,13 +1295,157 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Botão Teste WhatsApp */}
+      {/* Painel de Chats GPT Maker */}
+      {chatsAberto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-2xl w-[90%] max-w-6xl h-[80vh] flex border border-border overflow-hidden">
+            {/* Lista de conversas */}
+            <div className="w-1/3 border-r border-border flex flex-col">
+              <div className="bg-primary text-primary-foreground px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold">Conversas GPT Maker</h3>
+                  <p className="text-xs opacity-90">{gptMakerChats.length} conversas</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setChatsAberto(false);
+                    setConversaSelecionada(null);
+                  }}
+                  className="p-2 hover:bg-primary/80 rounded-lg transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {gptMakerChats.map((chat) => (
+                  <button
+                    key={chat.id}
+                    onClick={() => abrirConversaGPT(chat)}
+                    className={`w-full text-left p-4 rounded-lg border border-border hover:bg-muted/50 transition ${
+                      conversaSelecionada?.id === chat.id ? 'bg-primary/10 border-primary' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-card-foreground">{chat.name || chat.userName || 'Sem nome'}</h4>
+                      {chat.unReadCount > 0 && (
+                        <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
+                          {chat.unReadCount}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {chat.whatsappPhone || 'Telefone não disponível'}
+                    </p>
+                    {chat.agentName && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        🤖 {chat.agentName}
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Área de mensagens */}
+            <div className="flex-1 flex flex-col">
+              {conversaSelecionada ? (
+                <>
+                  <div className="bg-muted px-6 py-4 border-b border-border">
+                    <h3 className="font-bold text-card-foreground">
+                      {conversaSelecionada.name || conversaSelecionada.userName || 'Conversa'}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {conversaSelecionada.whatsappPhone}
+                    </p>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-muted/30">
+                    {mensagensGPT.map((msg, index) => (
+                      <div
+                        key={index}
+                        className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}
+                      >
+                        <div
+                          className={`max-w-[70%] px-4 py-3 rounded-2xl ${
+                            msg.role === 'user'
+                              ? 'bg-card text-card-foreground'
+                              : 'bg-primary text-primary-foreground'
+                          }`}
+                        >
+                          <p className="text-sm whitespace-pre-wrap">{msg.content || msg.text}</p>
+                          {msg.timestamp && (
+                            <p className="text-xs opacity-60 mt-1">
+                              {new Date(msg.timestamp).toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="p-4 border-t border-border">
+                    <div className="flex gap-3 mb-3">
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            atualizarStatusCliente(conversaSelecionada.id, e.target.value);
+                          }
+                        }}
+                        className="px-4 py-2 border border-input rounded-lg bg-background text-sm"
+                        defaultValue=""
+                      >
+                        <option value="">Mover para etapa...</option>
+                        {colunas.map(col => (
+                          <option key={col.id} value={col.id}>{col.titulo}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Digite sua mensagem..."
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            enviarMensagemGPT((e.target as HTMLInputElement).value);
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }}
+                        className="flex-1 px-4 py-2 border border-input rounded-full bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <button
+                        onClick={(e) => {
+                          const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                          enviarMensagemGPT(input.value);
+                          input.value = '';
+                        }}
+                        className="p-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition"
+                      >
+                        <Send size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                  <p>Selecione uma conversa para visualizar</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Botão Abrir Chats GPT Maker */}
       <button
-        onClick={() => receberMensagemWhatsApp('123.456.789-00', 'Olá! Gostaria de uma simulação')}
-        className="fixed bottom-6 left-6 p-4 bg-success text-success-foreground rounded-full shadow-lg hover:bg-success/90 transition"
-        title="Simular mensagem WhatsApp"
+        onClick={buscarChatsGPTMaker}
+        className="fixed bottom-6 left-6 p-4 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition"
+        title="Abrir conversas GPT Maker"
       >
-        <Phone size={24} />
+        <MessageCircle size={24} />
       </button>
     </div>
   );

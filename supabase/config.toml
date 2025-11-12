@@ -14,3 +14,12 @@ verify_jwt = false
 
 [functions.abacate-pay-webhook]
 verify_jwt = false
+
+[functions.gptmaker-chats]
+verify_jwt = false
+
+[functions.gptmaker-messages]
+verify_jwt = false
+
+[functions.gptmaker-send]
+verify_jwt = false
