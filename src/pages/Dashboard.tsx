@@ -536,7 +536,9 @@ const Dashboard = () => {
       }
 
       const data = await response.json();
-      setMensagensGPT(data);
+      console.log('Mensagens recebidas:', data);
+      setMensagensGPT(data || []);
+      toast.success(`${data?.length || 0} mensagens carregadas`);
     } catch (error) {
       console.error('Erro ao buscar mensagens:', error);
       toast.error('Erro ao carregar mensagens');
@@ -1361,30 +1363,74 @@ const Dashboard = () => {
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-muted/30">
-                    {mensagensGPT.map((msg, index) => (
-                      <div
-                        key={index}
-                        className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}
-                      >
-                        <div
-                          className={`max-w-[70%] px-4 py-3 rounded-2xl ${
-                            msg.role === 'user'
-                              ? 'bg-card text-card-foreground'
-                              : 'bg-primary text-primary-foreground'
-                          }`}
-                        >
-                          <p className="text-sm whitespace-pre-wrap">{msg.content || msg.text}</p>
-                          {msg.timestamp && (
-                            <p className="text-xs opacity-60 mt-1">
-                              {new Date(msg.timestamp).toLocaleTimeString('pt-BR', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </p>
-                          )}
-                        </div>
+                    {mensagensGPT.length === 0 ? (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        <p>Nenhuma mensagem ainda</p>
                       </div>
-                    ))}
+                    ) : (
+                      mensagensGPT.map((msg, index) => {
+                        const isUser = msg.role === 'user';
+                        return (
+                          <div
+                            key={msg.id || index}
+                            className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}
+                          >
+                            <div
+                              className={`max-w-[70%] px-4 py-3 rounded-2xl ${
+                                isUser
+                                  ? 'bg-card text-card-foreground border border-border'
+                                  : 'bg-primary text-primary-foreground'
+                              }`}
+                            >
+                              {msg.userName && (
+                                <p className="text-xs font-semibold mb-1 opacity-80">
+                                  {msg.userName}
+                                </p>
+                              )}
+                              
+                              {msg.text && (
+                                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                              )}
+                              
+                              {msg.imageUrl && (
+                                <img 
+                                  src={msg.imageUrl} 
+                                  alt="Imagem"
+                                  className="mt-2 rounded-lg max-w-full"
+                                  style={{ maxHeight: msg.height ? `${msg.height}px` : 'auto' }}
+                                />
+                              )}
+                              
+                              {msg.audioUrl && (
+                                <audio controls className="mt-2 w-full">
+                                  <source src={msg.audioUrl} />
+                                </audio>
+                              )}
+                              
+                              {msg.documentUrl && (
+                                <a 
+                                  href={msg.documentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 mt-2 text-xs underline"
+                                >
+                                  📎 {msg.fileName || 'Documento'}
+                                </a>
+                              )}
+                              
+                              {msg.time && (
+                                <p className="text-xs opacity-60 mt-1">
+                                  {new Date(msg.time).toLocaleTimeString('pt-BR', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
 
                   <div className="p-4 border-t border-border">

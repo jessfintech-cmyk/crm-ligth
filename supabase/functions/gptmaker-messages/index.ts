@@ -27,7 +27,7 @@ serve(async (req) => {
     console.log('Buscando mensagens da conversa:', conversationId);
 
     const response = await fetch(
-      `https://api.gptmaker.ai/v2/workspace/${GPTMAKER_WORKSPACE_ID}/conversation/${conversationId}/messages`,
+      `https://api.gptmaker.ai/v2/chat/${conversationId}/messages`,
       {
         method: 'GET',
         headers: {
