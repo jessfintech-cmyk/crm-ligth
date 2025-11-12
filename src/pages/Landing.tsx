@@ -403,6 +403,17 @@ const Landing = () => {
           ) : (
             <div className="space-y-4 py-4">
               <div className="flex flex-col items-center gap-4">
+                {/* Status Indicator */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-primary/10 rounded-lg border border-primary/20">
+                  <div className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                  </div>
+                  <span className="text-sm font-medium text-foreground">
+                    Aguardando confirmação do pagamento...
+                  </span>
+                </div>
+
                 <img 
                   src={qrCodeData.brCodeBase64} 
                   alt="QR Code PIX" 
