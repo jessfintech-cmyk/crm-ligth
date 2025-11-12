@@ -532,18 +532,17 @@ const Dashboard = () => {
         return;
       }
       
-      // Total da operação = parcela * coeficiente
-      totalOperacao = parcelaNum * coeficienteNum;
+      // Total da operação = parcela / coeficiente
+      totalOperacao = parcelaNum / coeficienteNum;
       
       // Valor líquido liberado = total - saldo devedor
       valorLiberado = totalOperacao - saldoDevedorNum;
       
-      observacao = `Total da operação: R$ ${totalOperacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-Saldo devedor quitado: R$ ${saldoDevedorNum.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+      observacao = `Saldo devedor quitado: R$ ${saldoDevedorNum.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
     } else {
       // Contrato novo, refin, cartões
-      // Valor liberado = parcela * coeficiente
-      valorLiberado = parcelaNum * coeficienteNum;
+      // Valor liberado = parcela / coeficiente
+      valorLiberado = parcelaNum / coeficienteNum;
       totalOperacao = valorLiberado;
       
       observacao = `Total da operação: R$ ${totalOperacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
