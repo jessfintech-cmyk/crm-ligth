@@ -371,7 +371,7 @@ const Dashboard = () => {
     try {
       const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-chat`;
 
-      console.log('Enviando mensagem para GPT Maker...');
+      console.log('Enviando mensagem para GPT Maker com contexto do agente...');
       
       const response = await fetch(CHAT_URL, {
         method: 'POST',
@@ -383,7 +383,10 @@ const Dashboard = () => {
           prompt: mensagemCliente,
           contextId: cliente.cpf,
           chatName: cliente.nome,
-          phone: cliente.telefone
+          phone: cliente.telefone,
+          status: cliente.status,
+          valorSolicitado: cliente.valorSolicitado,
+          banco: cliente.banco
         }),
       });
 
