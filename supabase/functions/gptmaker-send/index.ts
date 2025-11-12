@@ -11,23 +11,22 @@ serve(async (req) => {
   }
 
   try {
-    const { conversationId, message, phone } = await req.json();
+    const { chatId, message } = await req.json();
     
     const GPTMAKER_TOKEN = Deno.env.get('GPTMAKER_TOKEN');
-    const GPTMAKER_AGENT_ID = Deno.env.get('GPTMAKER_AGENT_ID');
     
-    if (!GPTMAKER_TOKEN || !GPTMAKER_AGENT_ID) {
-      throw new Error('GPTMAKER_TOKEN ou GPTMAKER_AGENT_ID não configurado');
+    if (!GPTMAKER_TOKEN) {
+      throw new Error('GPTMAKER_TOKEN não configurado');
     }
 
-    if (!conversationId || !message) {
-      throw new Error('conversationId e message são obrigatórios');
+    if (!chatId || !message) {
+      throw new Error('chatId e message são obrigatórios');
     }
 
-    console.log('Enviando mensagem:', { conversationId, message });
+    console.log('Enviando mensagem para chat:', chatId);
 
     const response = await fetch(
-      `https://api.gptmaker.ai/v2/agent/${GPTMAKER_AGENT_ID}/conversation`,
+      `https://api.gptmaker.ai/v2/chat/${chatId}/send-message`,
       {
         method: 'POST',
         headers: {
@@ -35,9 +34,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contextId: conversationId,
-          prompt: message,
-          phone: phone || '',
+          message
         }),
       }
     );
@@ -49,7 +46,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log('Resposta enviada com sucesso');
+    console.log('Mensagem enviada com sucesso:', data);
 
     return new Response(
       JSON.stringify(data),
@@ -61,6 +58,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Erro desconhecido',
+        success: false
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

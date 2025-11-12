@@ -575,9 +575,8 @@ const Dashboard = () => {
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
-            conversationId: conversaSelecionada.id,
+            chatId: conversaSelecionada.id,
             message: texto,
-            phone: conversaSelecionada.whatsappPhone,
           }),
         }
       );
@@ -586,9 +585,17 @@ const Dashboard = () => {
         throw new Error('Erro ao enviar mensagem');
       }
 
-      toast.success('Mensagem enviada!');
-      // Recarregar mensagens
-      await abrirConversaGPT(conversaSelecionada);
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success('Mensagem enviada!');
+        // Aguardar 500ms para garantir que a mensagem foi processada pelo GPT Maker
+        setTimeout(() => {
+          abrirConversaGPT(conversaSelecionada, false);
+        }, 500);
+      } else {
+        throw new Error('Falha ao enviar mensagem');
+      }
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
       toast.error('Erro ao enviar mensagem');
