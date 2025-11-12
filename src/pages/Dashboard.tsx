@@ -514,10 +514,12 @@ const Dashboard = () => {
     }
   };
 
-  const abrirConversaGPT = async (chat: any) => {
+  const abrirConversaGPT = async (chat: any, showToast: boolean = true) => {
     try {
-      setConversaSelecionada(chat);
-      toast.info('Carregando mensagens...');
+      if (showToast) {
+        setConversaSelecionada(chat);
+        toast.info('Carregando mensagens...');
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-messages`,
@@ -538,12 +540,27 @@ const Dashboard = () => {
       const data = await response.json();
       console.log('Mensagens recebidas:', data);
       setMensagensGPT(data || []);
-      toast.success(`${data?.length || 0} mensagens carregadas`);
+      if (showToast) {
+        toast.success(`${data?.length || 0} mensagens carregadas`);
+      }
     } catch (error) {
       console.error('Erro ao buscar mensagens:', error);
-      toast.error('Erro ao carregar mensagens');
+      if (showToast) {
+        toast.error('Erro ao carregar mensagens');
+      }
     }
   };
+
+  // Atualização automática de mensagens a cada 2 segundos
+  useEffect(() => {
+    if (!conversaSelecionada) return;
+
+    const interval = setInterval(() => {
+      abrirConversaGPT(conversaSelecionada, false);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [conversaSelecionada]);
 
   const enviarMensagemGPT = async (texto: string) => {
     if (!texto.trim() || !conversaSelecionada) return;
