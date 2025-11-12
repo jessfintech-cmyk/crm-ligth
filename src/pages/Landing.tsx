@@ -53,11 +53,11 @@ const Landing = () => {
             Automatize atendimentos, organize propostas e feche mais negócios com nosso CRM completo integrado com WhatsApp e IA.
           </p>
           <div className="flex gap-4 justify-center">
-            <Link to="/auth">
+            <a href="https://lovable.dev/pricing" target="_blank" rel="noopener noreferrer">
               <Button size="lg" className="text-lg px-8 py-6">
                 Começar Agora
               </Button>
-            </Link>
+            </a>
             <Button size="lg" variant="outline" className="text-lg px-8 py-6">
               Ver Demonstração
             </Button>
