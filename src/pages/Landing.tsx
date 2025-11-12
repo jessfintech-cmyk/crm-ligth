@@ -35,7 +35,7 @@ const Landing = () => {
     try {
       const { data, error } = await supabase.functions.invoke('abacate-pay-pix', {
         body: {
-          amount: 10000, // R$ 100.00 em centavos
+          amount: 9899, // R$ 98,99 em centavos
           description: 'Assinatura CRM Consignado',
           customer: formData
         }
