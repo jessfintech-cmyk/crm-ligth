@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { DollarSign, MessageCircle, Bot, TrendingUp, Shield, Zap, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -68,20 +68,60 @@ const Landing = () => {
     }
   };
 
+  // Listen for payment status changes via Realtime
+  useEffect(() => {
+    if (!qrCodeData?.id) return;
+
+    console.log('Setting up realtime listener for payment:', qrCodeData.id);
+
+    const channel = supabase
+      .channel(`payment-${qrCodeData.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'payments',
+          filter: `payment_id=eq.${qrCodeData.id}`,
+        },
+        (payload) => {
+          console.log('Payment status changed:', payload);
+          if (payload.new && typeof payload.new === 'object' && 'status' in payload.new) {
+            if (payload.new.status === 'COMPLETED') {
+              setPaymentSuccess(true);
+              toast({
+                title: "Pagamento confirmado!",
+                description: "Seu pagamento foi aprovado automaticamente"
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('Cleaning up realtime listener');
+      supabase.removeChannel(channel);
+    };
+  }, [qrCodeData?.id]);
+
   const handleCheckPayment = async () => {
     if (!qrCodeData?.id) return;
 
     setCheckingPayment(true);
     try {
-      const { data, error } = await supabase.functions.invoke('abacate-pay-check', {
-        body: {
-          paymentId: qrCodeData.id
-        }
-      });
+      // Query the database directly for payment status
+      const { data, error } = await supabase
+        .from('payments')
+        .select('status')
+        .eq('payment_id', qrCodeData.id)
+        .single();
 
       if (error) throw error;
 
-      if (data?.data?.status === 'COMPLETED') {
+      console.log('Payment status:', data);
+
+      if (data.status === 'COMPLETED') {
         setPaymentSuccess(true);
         toast({
           title: "Pagamento confirmado!",
@@ -90,8 +130,7 @@ const Landing = () => {
       } else {
         toast({
           title: "Pagamento pendente",
-          description: "Ainda não identificamos seu pagamento. Por favor, aguarde alguns instantes.",
-          variant: "destructive"
+          description: "Ainda não identificamos seu pagamento. Por favor, aguarde alguns instantes."
         });
       }
     } catch (error) {
@@ -399,6 +438,9 @@ const Landing = () => {
                 >
                   {checkingPayment ? 'Verificando...' : 'Já efetuei o pagamento'}
                 </Button>
+                <p className="text-sm text-muted-foreground text-center mt-2">
+                  O pagamento será confirmado automaticamente após a aprovação
+                </p>
               </div>
             </div>
           )}

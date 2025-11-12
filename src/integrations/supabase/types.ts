@@ -53,6 +53,57 @@ export type Database = {
           },
         ]
       }
+      payments: {
+        Row: {
+          amount: number
+          br_code: string | null
+          created_at: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string
+          customer_tax_id: string
+          expires_at: string | null
+          id: string
+          paid_at: string | null
+          payment_id: string
+          qr_code_base64: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          br_code?: string | null
+          created_at?: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string
+          customer_tax_id: string
+          expires_at?: string | null
+          id?: string
+          paid_at?: string | null
+          payment_id: string
+          qr_code_base64?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          br_code?: string | null
+          created_at?: string
+          customer_email?: string
+          customer_name?: string
+          customer_phone?: string
+          customer_tax_id?: string
+          expires_at?: string | null
+          id?: string
+          paid_at?: string | null
+          payment_id?: string
+          qr_code_base64?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tags: {
         Row: {
           cor: string

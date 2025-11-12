@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.81.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -65,6 +66,32 @@ serve(async (req) => {
     }
 
     console.log('PIX QR Code created successfully:', data.data.id);
+
+    // Save payment to database
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    );
+
+    const { error: dbError } = await supabase
+      .from('payments')
+      .insert({
+        payment_id: data.data.id,
+        customer_email: customer.email,
+        customer_name: customer.name,
+        customer_phone: customer.cellphone,
+        customer_tax_id: customer.taxId,
+        amount: amount,
+        status: data.data.status,
+        qr_code_base64: data.data.brCodeBase64,
+        br_code: data.data.brCode,
+        expires_at: data.data.expiresAt,
+      });
+
+    if (dbError) {
+      console.error('Error saving payment to database:', dbError);
+      // Continue anyway, return the QR code to user
+    }
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
