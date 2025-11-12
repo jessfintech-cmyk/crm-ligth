@@ -193,6 +193,7 @@ const Dashboard = () => {
   const [conversaSelecionada, setConversaSelecionada] = useState<any>(null);
   const [mensagensGPT, setMensagensGPT] = useState<any[]>([]);
   const mensagensEndRef = useRef<HTMLDivElement>(null);
+  const [canaisWhatsApp, setCanaisWhatsApp] = useState<any[]>([]);
   const [atendimentos, setAtendimentos] = useState<any[]>([]);
   const [atendimentosAberto, setAtendimentosAberto] = useState(false);
 
@@ -488,9 +489,40 @@ const Dashboard = () => {
     toast.success('Mensagem enviada via WhatsApp!');
   };
 
+  const buscarCanaisWhatsApp = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-channels`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.warn('Erro ao buscar canais WhatsApp');
+        return;
+      }
+
+      const result = await response.json();
+      const canais = result?.data || [];
+      const whatsappCanais = canais.filter((canal: any) => canal.type === 'WHATSAPP' && canal.connected);
+      setCanaisWhatsApp(whatsappCanais);
+      console.log(`${whatsappCanais.length} canais WhatsApp conectados`);
+    } catch (error) {
+      console.error('Erro ao buscar canais WhatsApp:', error);
+    }
+  };
+
   const buscarChatsGPTMaker = async () => {
     try {
       toast.info('Carregando conversas do GPT Maker...');
+      
+      // Buscar canais WhatsApp primeiro
+      await buscarCanaisWhatsApp();
       
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-chats`,
@@ -510,7 +542,12 @@ const Dashboard = () => {
       const data = await response.json();
       setGptMakerChats(data);
       setChatsAberto(true);
-      toast.success(`${data.length} conversas encontradas!`);
+      
+      const whatsappCount = data.filter((chat: any) => 
+        chat.channelType === 'WHATSAPP' || chat.channel?.type === 'WHATSAPP'
+      ).length;
+      
+      toast.success(`${data.length} conversas encontradas (${whatsappCount} do WhatsApp)!`);
     } catch (error) {
       console.error('Erro ao buscar chats:', error);
       toast.error('Erro ao carregar conversas do GPT Maker');
@@ -1389,32 +1426,44 @@ const Dashboard = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {gptMakerChats.map((chat) => (
-                  <button
-                    key={chat.id}
-                    onClick={() => abrirConversaGPT(chat)}
-                    className={`w-full text-left p-4 rounded-lg border border-border hover:bg-muted/50 transition ${
-                      conversaSelecionada?.id === chat.id ? 'bg-primary/10 border-primary' : ''
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-semibold text-card-foreground">{chat.name || chat.userName || 'Sem nome'}</h4>
-                      {chat.unReadCount > 0 && (
-                        <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
-                          {chat.unReadCount}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {chat.whatsappPhone || 'Telefone não disponível'}
-                    </p>
-                    {chat.agentName && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        🤖 {chat.agentName}
+                {gptMakerChats.map((chat) => {
+                  const isWhatsApp = chat.channelType === 'WHATSAPP' || chat.channel?.type === 'WHATSAPP';
+                  
+                  return (
+                    <button
+                      key={chat.id}
+                      onClick={() => abrirConversaGPT(chat)}
+                      className={`w-full text-left p-4 rounded-lg border border-border hover:bg-muted/50 transition ${
+                        conversaSelecionada?.id === chat.id ? 'bg-primary/10 border-primary' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {isWhatsApp && <Phone className="w-4 h-4 text-green-500" />}
+                          <h4 className="font-semibold text-card-foreground">{chat.name || chat.userName || 'Sem nome'}</h4>
+                          {isWhatsApp && (
+                            <span className="bg-green-500/20 text-green-500 text-xs px-2 py-0.5 rounded-full">
+                              WhatsApp
+                            </span>
+                          )}
+                        </div>
+                        {chat.unReadCount > 0 && (
+                          <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
+                            {chat.unReadCount}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {chat.whatsappPhone || 'Telefone não disponível'}
                       </p>
-                    )}
-                  </button>
-                ))}
+                      {chat.agentName && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          🤖 {chat.agentName}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
