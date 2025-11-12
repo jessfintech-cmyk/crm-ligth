@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
-import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users, Moon, Sun } from 'lucide-react';
+import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users, Moon, Sun, Activity, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import MessageTags from '@/components/MessageTags';
@@ -193,6 +193,8 @@ const Dashboard = () => {
   const [conversaSelecionada, setConversaSelecionada] = useState<any>(null);
   const [mensagensGPT, setMensagensGPT] = useState<any[]>([]);
   const mensagensEndRef = useRef<HTMLDivElement>(null);
+  const [atendimentos, setAtendimentos] = useState<any[]>([]);
+  const [atendimentosAberto, setAtendimentosAberto] = useState(false);
 
   // Verificar autenticação
   useEffect(() => {
@@ -512,6 +514,35 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Erro ao buscar chats:', error);
       toast.error('Erro ao carregar conversas do GPT Maker');
+    }
+  };
+
+  const buscarAtendimentos = async () => {
+    try {
+      toast.info('Carregando atendimentos...');
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gptmaker-interactions`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao buscar atendimentos');
+      }
+
+      const data = await response.json();
+      setAtendimentos(data);
+      setAtendimentosAberto(true);
+      toast.success(`${data.length} atendimentos encontrados!`);
+    } catch (error) {
+      console.error('Erro ao buscar atendimentos:', error);
+      toast.error('Erro ao carregar atendimentos');
     }
   };
 
@@ -1520,6 +1551,101 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Painel de Atendimentos */}
+      {atendimentosAberto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-2xl w-[90%] max-w-5xl h-[80vh] flex flex-col border border-border overflow-hidden">
+            <div className="bg-primary text-primary-foreground px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold">Histórico de Atendimentos</h3>
+                <p className="text-xs opacity-90">{atendimentos.length} atendimentos</p>
+              </div>
+              <button 
+                onClick={() => setAtendimentosAberto(false)}
+                className="p-2 hover:bg-primary/80 rounded-lg transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {atendimentos.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <p>Nenhum atendimento encontrado</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {atendimentos.map((atend) => {
+                    const statusConfig = {
+                      RUNNING: { icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Em andamento' },
+                      RESOLVED: { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-500/10', label: 'Resolvido' },
+                      TRANSFERRED: { icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10', label: 'Transferido' },
+                      CANCELLED: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-500/10', label: 'Cancelado' },
+                    };
+                    
+                    const config = statusConfig[atend.status] || statusConfig.RUNNING;
+                    const StatusIcon = config.icon;
+                    
+                    return (
+                      <div key={atend.id} className="bg-muted/30 border border-border rounded-lg p-4 hover:border-primary/50 transition">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="font-semibold text-card-foreground">{atend.chatName || 'Cliente'}</h4>
+                              <span className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${config.bg} ${config.color}`}>
+                                <StatusIcon size={14} />
+                                {config.label}
+                              </span>
+                            </div>
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              <p className="flex items-center gap-2">
+                                <Bot size={14} />
+                                Agente: {atend.agentName}
+                              </p>
+                              <p className="flex items-center gap-2">
+                                <Clock size={14} />
+                                Iniciado: {new Date(atend.startAt).toLocaleString('pt-BR')}
+                              </p>
+                              {atend.resolvedAt && (
+                                <p className="flex items-center gap-2">
+                                  <CheckCircle size={14} />
+                                  Finalizado: {new Date(atend.resolvedAt).toLocaleString('pt-BR')}
+                                </p>
+                              )}
+                              {atend.transferAt && (
+                                <p className="flex items-center gap-2">
+                                  <Clock size={14} />
+                                  Transferido: {new Date(atend.transferAt).toLocaleString('pt-BR')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {atend.agentAvatar && (
+                            <img 
+                              src={atend.agentAvatar} 
+                              alt={atend.agentName}
+                              className="w-12 h-12 rounded-full border-2 border-border"
+                            />
+                          )}
+                        </div>
+                        
+                        {atend.resolvedAt && atend.startAt && (
+                          <div className="mt-3 pt-3 border-t border-border">
+                            <p className="text-xs text-muted-foreground">
+                              Duração: {Math.round((new Date(atend.resolvedAt).getTime() - new Date(atend.startAt).getTime()) / 60000)} minutos
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Botão Abrir Chats GPT Maker */}
       <button
         onClick={buscarChatsGPTMaker}
@@ -1527,6 +1653,15 @@ const Dashboard = () => {
         title="Abrir conversas GPT Maker"
       >
         <MessageCircle size={24} />
+      </button>
+
+      {/* Botão Abrir Atendimentos */}
+      <button
+        onClick={buscarAtendimentos}
+        className="fixed bottom-6 left-24 p-4 bg-secondary text-secondary-foreground rounded-full shadow-lg hover:bg-secondary/90 transition"
+        title="Ver histórico de atendimentos"
+      >
+        <Activity size={24} />
       </button>
     </div>
   );
