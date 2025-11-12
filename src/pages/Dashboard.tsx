@@ -153,6 +153,7 @@ const Dashboard = () => {
   const [mensagem, setMensagem] = useState('');
   const [conversas, setConversas] = useState<Record<string, Mensagem[]>>({});
   const [simuladorAberto, setSimuladorAberto] = useState(false);
+  const [previewAberto, setPreviewAberto] = useState(false);
   const [dadosSimulacao, setDadosSimulacao] = useState({
     tipoOperacao: 'Contrato novo',
     bancoAtual: '',
@@ -162,6 +163,16 @@ const Dashboard = () => {
     coeficiente: '',
     prazo: ''
   });
+  const [operacoesSimulacao, setOperacoesSimulacao] = useState<Array<{
+    tipoOperacao: string;
+    bancoAtual: string;
+    bancoOperacao: string;
+    parcela: number;
+    saldoDevedor: number;
+    prazo: number;
+    valorLiberado: number;
+    observacao: string;
+  }>>([]);
   const [menuAberto, setMenuAberto] = useState(false);
   const [usuario] = useState({
     nome: 'Administrador',
@@ -502,7 +513,7 @@ const Dashboard = () => {
     return mensagens[status] || 'Status atualizado!';
   };
 
-  const calcularSimulacao = () => {
+  const adicionarOperacao = () => {
     const { tipoOperacao, bancoAtual, bancoOperacao, parcela, saldoDevedor, coeficiente, prazo } = dadosSimulacao;
     
     const parcelaNum = parseFloat(parcela);
@@ -512,6 +523,11 @@ const Dashboard = () => {
 
     if (!tipoOperacao || !parcela || !coeficiente || !prazo) {
       toast.error('Preencha os campos obrigatórios');
+      return;
+    }
+
+    if (coeficienteNum === 0) {
+      toast.error('Coeficiente não pode ser zero');
       return;
     }
 
@@ -545,31 +561,77 @@ const Dashboard = () => {
       valorLiberado = parcelaNum / coeficienteNum;
       totalOperacao = valorLiberado;
       
-      observacao = `Total da operação: R$ ${totalOperacao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+      observacao = '';
     }
 
-    const resultadoTexto = `💰 *Simulação de Crédito*
+    setOperacoesSimulacao([...operacoesSimulacao, {
+      tipoOperacao,
+      bancoAtual,
+      bancoOperacao,
+      parcela: parcelaNum,
+      saldoDevedor: saldoDevedorNum,
+      prazo: prazoNum,
+      valorLiberado,
+      observacao
+    }]);
 
-📋 Tipo: ${tipoOperacao}
-${bancoAtual ? `🏦 Banco atual: ${bancoAtual}` : ''}
-${bancoOperacao ? `🏦 Banco da operação: ${bancoOperacao}` : ''}
+    // Limpar formulário
+    setDadosSimulacao({
+      tipoOperacao: 'Contrato novo',
+      bancoAtual: '',
+      bancoOperacao: '',
+      parcela: '',
+      saldoDevedor: '',
+      coeficiente: '',
+      prazo: ''
+    });
 
-📊 Dados:
-Parcela: R$ ${parcelaNum.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-Coeficiente: ${coeficienteNum}
-Prazo: ${prazoNum} meses
+    toast.success('Operação adicionada!');
+  };
 
-💵 Resultado:
-${observacao}
-💰 Valor líquido liberado: R$ ${valorLiberado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+  const removerOperacao = (index: number) => {
+    setOperacoesSimulacao(operacoesSimulacao.filter((_, i) => i !== index));
+  };
 
-Deseja prosseguir com esta proposta?`;
+  const abrirPreview = () => {
+    if (operacoesSimulacao.length === 0) {
+      toast.error('Adicione pelo menos uma operação');
+      return;
+    }
+    setPreviewAberto(true);
+  };
+
+  const enviarSimulacao = () => {
+    if (operacoesSimulacao.length === 0) return;
+
+    let mensagemFinal = '💰 *Simulação de Crédito*\n\n';
+
+    operacoesSimulacao.forEach((op, index) => {
+      mensagemFinal += `📋 *Operação ${index + 1}*\n`;
+      mensagemFinal += `Tipo: ${op.tipoOperacao}\n`;
+      if (op.bancoAtual) mensagemFinal += `🏦 Banco atual: ${op.bancoAtual}\n`;
+      if (op.bancoOperacao) mensagemFinal += `🏦 Banco da operação: ${op.bancoOperacao}\n`;
+      mensagemFinal += `\n📊 Dados:\n`;
+      mensagemFinal += `Parcela: R$ ${op.parcela.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
+      mensagemFinal += `Prazo: ${op.prazo} meses\n`;
+      mensagemFinal += `\n💵 Resultado:\n`;
+      if (op.observacao) mensagemFinal += `${op.observacao}\n`;
+      mensagemFinal += `💰 Valor líquido liberado: R$ ${op.valorLiberado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
+      mensagemFinal += `\n`;
+    });
+
+    const totalLiberado = operacoesSimulacao.reduce((sum, op) => sum + op.valorLiberado, 0);
+    mensagemFinal += `✅ *TOTAL LIBERADO: R$ ${totalLiberado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}*\n\n`;
+    mensagemFinal += `📲 Deseja prosseguir com esta proposta?\n`;
+    mensagemFinal += `👉 [Aceitar Proposta](https://wa.me/5511999999999?text=Aceito%20a%20proposta)`;
 
     if (clienteSelecionado) {
-      enviarMensagem(resultadoTexto, true);
+      enviarMensagem(mensagemFinal, true);
     }
 
-    toast.success('Simulação calculada!');
+    toast.success('Simulação enviada!');
+    setOperacoesSimulacao([]);
+    setPreviewAberto(false);
     setSimuladorAberto(false);
   };
 
@@ -833,6 +895,71 @@ Deseja prosseguir com esta proposta?`;
         </div>
       )}
 
+      {/* Preview da Simulação */}
+      {previewAberto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-2xl p-8 w-[600px] max-w-[90%] max-h-[90vh] overflow-y-auto border border-border">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-card-foreground">Preview da Simulação</h2>
+              <button 
+                onClick={() => setPreviewAberto(false)}
+                className="p-2 hover:bg-muted rounded-lg transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              {operacoesSimulacao.map((op, index) => (
+                <div key={index} className="p-4 bg-muted/50 rounded-lg border border-border">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-lg">Operação {index + 1}</h3>
+                    <button
+                      onClick={() => removerOperacao(index)}
+                      className="p-1 hover:bg-destructive/10 rounded transition"
+                    >
+                      <X size={18} className="text-destructive" />
+                    </button>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p><span className="font-medium">Tipo:</span> {op.tipoOperacao}</p>
+                    {op.bancoAtual && <p><span className="font-medium">Banco atual:</span> {op.bancoAtual}</p>}
+                    {op.bancoOperacao && <p><span className="font-medium">Banco da operação:</span> {op.bancoOperacao}</p>}
+                    <p><span className="font-medium">Parcela:</span> R$ {op.parcela.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    <p><span className="font-medium">Prazo:</span> {op.prazo} meses</p>
+                    {op.observacao && <p className="text-muted-foreground">{op.observacao}</p>}
+                    <p className="text-lg font-bold text-primary">
+                      💰 Valor liberado: R$ {op.valorLiberado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              <div className="p-4 bg-primary/10 rounded-lg border-2 border-primary">
+                <p className="text-xl font-bold text-primary">
+                  Total Liberado: R$ {operacoesSimulacao.reduce((sum, op) => sum + op.valorLiberado, 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPreviewAberto(false)}
+                className="flex-1 py-3 bg-secondary text-secondary-foreground rounded-lg font-semibold hover:bg-secondary/90 transition"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={enviarSimulacao}
+                className="flex-1 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition"
+              >
+                Enviar no WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Simulador de Crédito */}
       {simuladorAberto && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -981,12 +1108,42 @@ Deseja prosseguir com esta proposta?`;
                 </div>
               </div>
 
-              <button
-                onClick={calcularSimulacao}
-                className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition mt-6"
-              >
-                Calcular e Enviar no WhatsApp
-              </button>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={adicionarOperacao}
+                  className="flex-1 py-3 bg-secondary text-secondary-foreground rounded-lg font-semibold hover:bg-secondary/90 transition"
+                >
+                  + Adicionar Operação
+                </button>
+                <button
+                  onClick={abrirPreview}
+                  className="flex-1 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition"
+                >
+                  Visualizar ({operacoesSimulacao.length})
+                </button>
+              </div>
+
+              {operacoesSimulacao.length > 0 && (
+                <div className="mt-4 p-4 bg-muted rounded-lg">
+                  <p className="text-sm font-semibold mb-2">Operações adicionadas:</p>
+                  {operacoesSimulacao.map((op, index) => (
+                    <div key={index} className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
+                      <div className="text-sm">
+                        <span className="font-medium">{op.tipoOperacao}</span>
+                        <span className="text-muted-foreground ml-2">
+                          R$ {op.valorLiberado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => removerOperacao(index)}
+                        className="p-1 hover:bg-destructive/10 rounded transition"
+                      >
+                        <X size={16} className="text-destructive" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
