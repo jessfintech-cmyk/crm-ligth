@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { MessageCircle, User, DollarSign, Phone, Send, Bot, Calculator, ImagePlus, X, Menu, LogOut, Settings, Users, Moon, Sun } from 'lucide-react';
 import { toast } from 'sonner';
@@ -192,6 +192,7 @@ const Dashboard = () => {
   const [chatsAberto, setChatsAberto] = useState(false);
   const [conversaSelecionada, setConversaSelecionada] = useState<any>(null);
   const [mensagensGPT, setMensagensGPT] = useState<any[]>([]);
+  const mensagensEndRef = useRef<HTMLDivElement>(null);
 
   // Verificar autenticação
   useEffect(() => {
@@ -561,6 +562,13 @@ const Dashboard = () => {
 
     return () => clearInterval(interval);
   }, [conversaSelecionada]);
+
+  // Scroll automático para a última mensagem
+  useEffect(() => {
+    if (mensagensGPT.length > 0) {
+      mensagensEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [mensagensGPT]);
 
   const enviarMensagemGPT = async (texto: string) => {
     if (!texto.trim() || !conversaSelecionada) return;
@@ -1392,68 +1400,71 @@ const Dashboard = () => {
                         <p>Nenhuma mensagem ainda</p>
                       </div>
                     ) : (
-                      mensagensGPT.map((msg, index) => {
-                        const isUser = msg.role === 'user';
-                        return (
-                          <div
-                            key={msg.id || index}
-                            className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}
-                          >
+                      <>
+                        {mensagensGPT.map((msg, index) => {
+                          const isUser = msg.role === 'user';
+                          return (
                             <div
-                              className={`max-w-[70%] px-4 py-3 rounded-2xl ${
-                                isUser
-                                  ? 'bg-card text-card-foreground border border-border'
-                                  : 'bg-primary text-primary-foreground'
-                              }`}
+                              key={msg.id || index}
+                              className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}
                             >
-                              {msg.userName && (
-                                <p className="text-xs font-semibold mb-1 opacity-80">
-                                  {msg.userName}
-                                </p>
-                              )}
-                              
-                              {msg.text && (
-                                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                              )}
-                              
-                              {msg.imageUrl && (
-                                <img 
-                                  src={msg.imageUrl} 
-                                  alt="Imagem"
-                                  className="mt-2 rounded-lg max-w-full"
-                                  style={{ maxHeight: msg.height ? `${msg.height}px` : 'auto' }}
-                                />
-                              )}
-                              
-                              {msg.audioUrl && (
-                                <audio controls className="mt-2 w-full">
-                                  <source src={msg.audioUrl} />
-                                </audio>
-                              )}
-                              
-                              {msg.documentUrl && (
-                                <a 
-                                  href={msg.documentUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-2 mt-2 text-xs underline"
-                                >
-                                  📎 {msg.fileName || 'Documento'}
-                                </a>
-                              )}
-                              
-                              {msg.time && (
-                                <p className="text-xs opacity-60 mt-1">
-                                  {new Date(msg.time).toLocaleTimeString('pt-BR', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </p>
-                              )}
+                              <div
+                                className={`max-w-[70%] px-4 py-3 rounded-2xl ${
+                                  isUser
+                                    ? 'bg-card text-card-foreground border border-border'
+                                    : 'bg-primary text-primary-foreground'
+                                }`}
+                              >
+                                {msg.userName && (
+                                  <p className="text-xs font-semibold mb-1 opacity-80">
+                                    {msg.userName}
+                                  </p>
+                                )}
+                                
+                                {msg.text && (
+                                  <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                                )}
+                                
+                                {msg.imageUrl && (
+                                  <img 
+                                    src={msg.imageUrl} 
+                                    alt="Imagem"
+                                    className="mt-2 rounded-lg max-w-full"
+                                    style={{ maxHeight: msg.height ? `${msg.height}px` : 'auto' }}
+                                  />
+                                )}
+                                
+                                {msg.audioUrl && (
+                                  <audio controls className="mt-2 w-full">
+                                    <source src={msg.audioUrl} />
+                                  </audio>
+                                )}
+                                
+                                {msg.documentUrl && (
+                                  <a 
+                                    href={msg.documentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 mt-2 text-xs underline"
+                                  >
+                                    📎 {msg.fileName || 'Documento'}
+                                  </a>
+                                )}
+                                
+                                {msg.time && (
+                                  <p className="text-xs opacity-60 mt-1">
+                                    {new Date(msg.time).toLocaleTimeString('pt-BR', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })
+                          );
+                        })}
+                        <div ref={mensagensEndRef} />
+                      </>
                     )}
                   </div>
 
