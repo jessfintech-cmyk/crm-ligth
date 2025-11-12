@@ -1,10 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.0";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Schema de validação para webhook
+const webhookSchema = z.object({
+  contextId: z.string().regex(/^\d{11}$/, 'CPF deve conter exatamente 11 dígitos'),
+  prompt: z.string().min(1, 'Mensagem não pode estar vazia').max(4000, 'Mensagem muito longa (máximo 4000 caracteres)'),
+  chatName: z.string().max(200, 'Nome muito longo').optional(),
+  phone: z.string().regex(/^[\d+\-\s()]{10,20}$/, 'Formato de telefone inválido')
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -13,28 +22,32 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log('Webhook recebido do GPT Maker:', payload);
+    
+    // Validar entrada antes de processar
+    const validationResult = webhookSchema.safeParse(payload);
+    if (!validationResult.success) {
+      console.error('Dados inválidos no webhook:', validationResult.error.errors);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Dados inválidos no webhook',
+          details: validationResult.error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log('Webhook recebido e validado do GPT Maker');
 
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Extrair dados da mensagem do webhook
-    const { 
-      contextId, // CPF do cliente
-      prompt, // Mensagem do cliente
-      chatName, // Nome do cliente
-      phone // Telefone do cliente
-    } = payload;
-
-    if (!contextId || !prompt || !phone) {
-      console.error('Dados incompletos no webhook:', payload);
-      return new Response(
-        JSON.stringify({ error: 'Dados incompletos no webhook' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Usar dados validados
+    const { contextId, prompt, chatName, phone } = validationResult.data;
 
     // Salvar mensagem do cliente no banco
     const { data: insertData, error: insertError } = await supabase
