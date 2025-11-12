@@ -173,6 +173,10 @@ const Dashboard = () => {
     valorLiberado: number;
     observacao: string;
   }>>([]);
+  const [whatsappConfig, setWhatsappConfig] = useState({
+    numero: '+5551995353698',
+    mensagemBotao: 'Aceito a proposta'
+  });
   const [menuAberto, setMenuAberto] = useState(false);
   const [usuario] = useState({
     nome: 'Administrador',
@@ -623,7 +627,10 @@ const Dashboard = () => {
     const totalLiberado = operacoesSimulacao.reduce((sum, op) => sum + op.valorLiberado, 0);
     mensagemFinal += `✅ *TOTAL LIBERADO: R$ ${totalLiberado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}*\n\n`;
     mensagemFinal += `📲 Deseja prosseguir com esta proposta?\n`;
-    mensagemFinal += `👉 [Aceitar Proposta](https://wa.me/5511999999999?text=Aceito%20a%20proposta)`;
+    
+    const numeroFormatado = whatsappConfig.numero.replace(/\D/g, '');
+    const mensagemCodificada = encodeURIComponent(whatsappConfig.mensagemBotao);
+    mensagemFinal += `👉 [Aceitar Proposta](https://wa.me/${numeroFormatado}?text=${mensagemCodificada})`;
 
     if (clienteSelecionado) {
       enviarMensagem(mensagemFinal, true);
@@ -996,6 +1003,34 @@ const Dashboard = () => {
 
               <div className="border-t border-border my-4 pt-4">
                 <p className="text-sm text-muted-foreground text-center mb-4">ou preencha manualmente</p>
+              </div>
+
+              <div className="bg-muted/50 p-4 rounded-lg space-y-3 mb-4">
+                <h3 className="font-semibold text-sm text-card-foreground">Configurações do WhatsApp</h3>
+                <div>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
+                    Número do WhatsApp (com DDI)
+                  </label>
+                  <input
+                    type="text"
+                    value={whatsappConfig.numero}
+                    onChange={(e) => setWhatsappConfig({...whatsappConfig, numero: e.target.value})}
+                    className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="+5551995353698"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
+                    Mensagem do botão de aceite
+                  </label>
+                  <input
+                    type="text"
+                    value={whatsappConfig.mensagemBotao}
+                    onChange={(e) => setWhatsappConfig({...whatsappConfig, mensagemBotao: e.target.value})}
+                    className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Aceito a proposta"
+                  />
+                </div>
               </div>
 
               <div>
