@@ -1,11 +1,80 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DollarSign, MessageCircle, Bot, TrendingUp, Shield, Zap, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/contexts/ThemeProvider';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 const Landing = () => {
   const { theme, setTheme } = useTheme();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<{brCodeBase64: string, brCode: string} | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    cellphone: '',
+    email: '',
+    taxId: ''
+  });
+
+  const handleCreateQRCode = async () => {
+    if (!formData.name || !formData.cellphone || !formData.email || !formData.taxId) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor, preencha todos os campos",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('abacate-pay-pix', {
+        body: {
+          amount: 10000, // R$ 100.00 em centavos
+          description: 'Assinatura CRM Consignado',
+          customer: formData
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.data) {
+        setQrCodeData({
+          brCodeBase64: data.data.brCodeBase64,
+          brCode: data.data.brCode
+        });
+        toast({
+          title: "QR Code gerado!",
+          description: "Use o QR Code abaixo para realizar o pagamento"
+        });
+      }
+    } catch (error) {
+      console.error('Error creating QR Code:', error);
+      toast({
+        title: "Erro ao gerar QR Code",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenDialog = () => {
+    setDialogOpen(true);
+    setQrCodeData(null);
+    setFormData({
+      name: '',
+      cellphone: '',
+      email: '',
+      taxId: ''
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
@@ -53,11 +122,9 @@ const Landing = () => {
             Automatize atendimentos, organize propostas e feche mais negócios com nosso CRM completo integrado com WhatsApp e IA.
           </p>
           <div className="flex gap-4 justify-center">
-            <a href="https://lovable.dev/pricing" target="_blank" rel="noopener noreferrer">
-              <Button size="lg" className="text-lg px-8 py-6">
-                Começar Agora
-              </Button>
-            </a>
+            <Button size="lg" className="text-lg px-8 py-6" onClick={handleOpenDialog}>
+              Começar Agora
+            </Button>
             <Button size="lg" variant="outline" className="text-lg px-8 py-6">
               Ver Demonstração
             </Button>
@@ -169,6 +236,103 @@ const Landing = () => {
           <p>© 2025 CRM Consignado. Todos os direitos reservados.</p>
         </div>
       </footer>
+
+      {/* Checkout Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Finalizar Compra</DialogTitle>
+            <DialogDescription>
+              Preencha seus dados para gerar o QR Code de pagamento
+            </DialogDescription>
+          </DialogHeader>
+          
+          {!qrCodeData ? (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome Completo</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="João Silva"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="cellphone">Telefone</Label>
+                <Input
+                  id="cellphone"
+                  value={formData.cellphone}
+                  onChange={(e) => setFormData({ ...formData, cellphone: e.target.value })}
+                  placeholder="(11) 99999-9999"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="joao@exemplo.com"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="taxId">CPF</Label>
+                <Input
+                  id="taxId"
+                  value={formData.taxId}
+                  onChange={(e) => setFormData({ ...formData, taxId: e.target.value })}
+                  placeholder="123.456.789-01"
+                />
+              </div>
+              
+              <Button 
+                onClick={handleCreateQRCode} 
+                className="w-full"
+                disabled={loading}
+              >
+                {loading ? 'Gerando...' : 'Criar QR Code'}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="flex flex-col items-center gap-4">
+                <img 
+                  src={qrCodeData.brCodeBase64} 
+                  alt="QR Code PIX" 
+                  className="w-64 h-64"
+                />
+                <div className="w-full">
+                  <Label>Código PIX Copia e Cola</Label>
+                  <div className="flex gap-2 mt-2">
+                    <Input 
+                      value={qrCodeData.brCode} 
+                      readOnly 
+                      className="text-xs"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(qrCodeData.brCode);
+                        toast({
+                          title: "Copiado!",
+                          description: "Código PIX copiado para a área de transferência"
+                        });
+                      }}
+                    >
+                      Copiar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.categorize-message]
 verify_jwt = false
+
+[functions.abacate-pay-pix]
+verify_jwt = false
