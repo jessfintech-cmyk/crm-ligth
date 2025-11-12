@@ -532,16 +532,22 @@ const Dashboard = () => {
         }
       );
 
-      if (!response.ok) {
-        throw new Error('Erro ao buscar atendimentos');
-      }
-
       const data = await response.json();
-      setAtendimentos(data);
+      
+      // Garantir que sempre temos um array
+      const atendimentosArray = Array.isArray(data) ? data : (data.interactions || []);
+      
+      setAtendimentos(atendimentosArray);
       setAtendimentosAberto(true);
-      toast.success(`${data.length} atendimentos encontrados!`);
+      
+      if (!response.ok) {
+        toast.warning(`Aviso: ${data.error || 'Erro ao buscar atendimentos'}`);
+      } else {
+        toast.success(`${atendimentosArray.length} atendimentos encontrados!`);
+      }
     } catch (error) {
       console.error('Erro ao buscar atendimentos:', error);
+      setAtendimentos([]);
       toast.error('Erro ao carregar atendimentos');
     }
   };
