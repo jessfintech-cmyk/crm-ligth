@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.abacate-pay-pix]
 verify_jwt = false
+
+[functions.abacate-pay-check]
+verify_jwt = false

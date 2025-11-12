@@ -13,7 +13,9 @@ const Landing = () => {
   const { theme, setTheme } = useTheme();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [qrCodeData, setQrCodeData] = useState<{brCodeBase64: string, brCode: string} | null>(null);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<{brCodeBase64: string, brCode: string, id: string} | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     cellphone: '',
@@ -46,7 +48,8 @@ const Landing = () => {
       if (data?.data) {
         setQrCodeData({
           brCodeBase64: data.data.brCodeBase64,
-          brCode: data.data.brCode
+          brCode: data.data.brCode,
+          id: data.data.id
         });
         toast({
           title: "QR Code gerado!",
@@ -65,9 +68,48 @@ const Landing = () => {
     }
   };
 
+  const handleCheckPayment = async () => {
+    if (!qrCodeData?.id) return;
+
+    setCheckingPayment(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('abacate-pay-check', {
+        body: {
+          pixId: qrCodeData.id
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.data?.status === 'COMPLETED') {
+        setPaymentConfirmed(true);
+        toast({
+          title: "Pagamento confirmado!",
+          description: "Seu pagamento foi processado com sucesso"
+        });
+      } else {
+        toast({
+          title: "Pagamento pendente",
+          description: "O pagamento ainda não foi identificado. Tente novamente em alguns instantes.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error checking payment:', error);
+      toast({
+        title: "Erro ao verificar pagamento",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive"
+      });
+    } finally {
+      setCheckingPayment(false);
+    }
+  };
+
   const handleOpenDialog = () => {
     setDialogOpen(true);
     setQrCodeData(null);
+    setPaymentConfirmed(false);
     setFormData({
       name: '',
       cellphone: '',
@@ -298,6 +340,25 @@ const Landing = () => {
                 {loading ? 'Gerando...' : 'Criar QR Code'}
               </Button>
             </div>
+          ) : paymentConfirmed ? (
+            <div className="space-y-4 py-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-foreground">
+                Pagamento realizado com sucesso!
+              </h3>
+              <p className="text-muted-foreground">
+                Já pode efetuar seu login na plataforma.
+              </p>
+              <Link to="/auth" className="block">
+                <Button className="w-full mt-4">
+                  Fazer Login
+                </Button>
+              </Link>
+            </div>
           ) : (
             <div className="space-y-4 py-4">
               <div className="flex flex-col items-center gap-4">
@@ -328,6 +389,14 @@ const Landing = () => {
                     </Button>
                   </div>
                 </div>
+                <Button 
+                  onClick={handleCheckPayment} 
+                  className="w-full mt-4"
+                  disabled={checkingPayment}
+                  variant="outline"
+                >
+                  {checkingPayment ? 'Verificando...' : 'Já efetuei o pagamento'}
+                </Button>
               </div>
             </div>
           )}
