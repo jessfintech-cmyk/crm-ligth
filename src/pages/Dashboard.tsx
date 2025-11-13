@@ -196,6 +196,7 @@ const Dashboard = () => {
   const [canaisWhatsApp, setCanaisWhatsApp] = useState<any[]>([]);
   const [atendimentos, setAtendimentos] = useState<any[]>([]);
   const [atendimentosAberto, setAtendimentosAberto] = useState(false);
+  const [filtrarWhatsApp, setFiltrarWhatsApp] = useState(false);
 
   // Verificar autenticação
   useEffect(() => {
@@ -1410,23 +1411,43 @@ const Dashboard = () => {
             {/* Lista de conversas */}
             <div className="w-1/3 border-r border-border flex flex-col">
               <div className="bg-primary text-primary-foreground px-6 py-4 flex items-center justify-between">
-                <div>
+                <div className="flex-1">
                   <h3 className="font-bold">Conversas GPT Maker</h3>
                   <p className="text-xs opacity-90">{gptMakerChats.length} conversas</p>
                 </div>
-                <button 
-                  onClick={() => {
-                    setChatsAberto(false);
-                    setConversaSelecionada(null);
-                  }}
-                  className="p-2 hover:bg-primary/80 rounded-lg transition"
-                >
-                  <X size={20} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setFiltrarWhatsApp(!filtrarWhatsApp)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      filtrarWhatsApp 
+                        ? 'bg-white/20 text-white' 
+                        : 'bg-white/10 text-white/70 hover:bg-white/15'
+                    }`}
+                    title={filtrarWhatsApp ? 'Mostrar todas as conversas' : 'Filtrar apenas WhatsApp'}
+                  >
+                    <Phone size={14} />
+                    {filtrarWhatsApp ? 'Apenas WhatsApp' : 'Filtrar WhatsApp'}
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setChatsAberto(false);
+                      setConversaSelecionada(null);
+                      setFiltrarWhatsApp(false);
+                    }}
+                    className="p-2 hover:bg-primary/80 rounded-lg transition"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {gptMakerChats.map((chat) => {
+                {gptMakerChats
+                  .filter(chat => {
+                    if (!filtrarWhatsApp) return true;
+                    return chat.channelType === 'WHATSAPP' || chat.channel?.type === 'WHATSAPP';
+                  })
+                  .map((chat) => {
                   const isWhatsApp = chat.channelType === 'WHATSAPP' || chat.channel?.type === 'WHATSAPP';
                   
                   return (
