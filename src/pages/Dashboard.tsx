@@ -197,6 +197,12 @@ const Dashboard = () => {
   const [atendimentos, setAtendimentos] = useState<any[]>([]);
   const [atendimentosAberto, setAtendimentosAberto] = useState(false);
   const [filtrarWhatsApp, setFiltrarWhatsApp] = useState(false);
+  const [whatsappAberto, setWhatsappAberto] = useState(false);
+  const [conversasWhatsApp, setConversasWhatsApp] = useState<any[]>([]);
+  const [conversaWhatsAppSelecionada, setConversaWhatsAppSelecionada] = useState<any>(null);
+  const [mensagensWhatsApp, setMensagensWhatsApp] = useState<any[]>([]);
+  const [novaMensagemWhatsApp, setNovaMensagemWhatsApp] = useState('');
+  const whatsappEndRef = useRef<HTMLDivElement>(null);
 
   // Verificar autenticação
   useEffect(() => {
@@ -589,6 +595,155 @@ const Dashboard = () => {
       toast.error('Erro ao carregar atendimentos');
     }
   };
+
+  const carregarConversasWhatsApp = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro ao carregar conversas WhatsApp:', error);
+        return;
+      }
+
+      // Agrupar mensagens por telefone
+      const conversasPorTelefone: Record<string, any> = {};
+      data?.forEach((msg: any) => {
+        if (!conversasPorTelefone[msg.cliente_telefone]) {
+          conversasPorTelefone[msg.cliente_telefone] = {
+            telefone: msg.cliente_telefone,
+            nome: msg.cliente_nome || 'Cliente',
+            ultimaMensagem: msg.texto,
+            timestamp: msg.created_at,
+            naoLidas: msg.remetente === 'cliente' ? 1 : 0
+          };
+        }
+      });
+
+      setConversasWhatsApp(Object.values(conversasPorTelefone));
+    } catch (error) {
+      console.error('Erro ao carregar conversas:', error);
+    }
+  };
+
+  const abrirConversaWhatsApp = async (telefone: string) => {
+    try {
+      const conversa = conversasWhatsApp.find(c => c.telefone === telefone);
+      setConversaWhatsAppSelecionada(conversa);
+
+      const { data, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .eq('cliente_telefone', telefone)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar mensagens:', error);
+        toast.error('Erro ao carregar mensagens');
+        return;
+      }
+
+      setMensagensWhatsApp(data || []);
+    } catch (error) {
+      console.error('Erro:', error);
+      toast.error('Erro ao abrir conversa');
+    }
+  };
+
+  const enviarMensagemWhatsApp = async () => {
+    if (!novaMensagemWhatsApp.trim() || !conversaWhatsAppSelecionada) return;
+
+    try {
+      toast.info('Enviando mensagem...');
+
+      // Salvar no banco local primeiro
+      const { error: dbError } = await supabase
+        .from('whatsapp_messages')
+        .insert({
+          cliente_telefone: conversaWhatsAppSelecionada.telefone,
+          cliente_nome: conversaWhatsAppSelecionada.nome,
+          cliente_cpf: conversaWhatsAppSelecionada.telefone,
+          remetente: 'agente',
+          texto: novaMensagemWhatsApp,
+          agente_nome: user?.user_metadata?.name || 'Agente'
+        });
+
+      if (dbError) {
+        console.error('Erro ao salvar no banco:', dbError);
+        toast.error('Erro ao salvar mensagem');
+        return;
+      }
+
+      // Enviar via WhatsApp API
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-send`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            to: conversaWhatsAppSelecionada.telefone,
+            message: novaMensagemWhatsApp
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao enviar mensagem');
+      }
+
+      setNovaMensagemWhatsApp('');
+      toast.success('Mensagem enviada!');
+      await abrirConversaWhatsApp(conversaWhatsAppSelecionada.telefone);
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+      toast.error('Erro ao enviar mensagem via WhatsApp');
+    }
+  };
+
+  // Carregar conversas do WhatsApp quando abrir o painel
+  useEffect(() => {
+    if (whatsappAberto) {
+      carregarConversasWhatsApp();
+    }
+  }, [whatsappAberto]);
+
+  // Atualizar mensagens do WhatsApp em tempo real
+  useEffect(() => {
+    if (!conversaWhatsAppSelecionada) return;
+
+    const channel = supabase
+      .channel(`whatsapp_${conversaWhatsAppSelecionada.telefone}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'whatsapp_messages',
+          filter: `cliente_telefone=eq.${conversaWhatsAppSelecionada.telefone}`
+        },
+        async (payload) => {
+          console.log('Atualização WhatsApp:', payload);
+          await abrirConversaWhatsApp(conversaWhatsAppSelecionada.telefone);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversaWhatsAppSelecionada]);
+
+  // Scroll automático para última mensagem do WhatsApp
+  useEffect(() => {
+    if (mensagensWhatsApp.length > 0) {
+      whatsappEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [mensagensWhatsApp]);
 
   const abrirConversaGPT = async (chat: any, showToast: boolean = true) => {
     try {
@@ -1721,6 +1876,202 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Painel de WhatsApp */}
+      {whatsappAberto && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-card rounded-2xl w-[95%] max-w-[1400px] h-[90vh] flex flex-col shadow-2xl border border-border">
+            {/* Header */}
+            <div className="bg-[#25D366] text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <Phone size={24} />
+                <div>
+                  <h2 className="text-xl font-bold">WhatsApp Business</h2>
+                  <p className="text-sm opacity-90">{conversasWhatsApp.length} conversas ativas</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setWhatsappAberto(false);
+                  setConversaWhatsAppSelecionada(null);
+                }}
+                className="p-2 hover:bg-white/20 rounded-lg transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex-1 flex overflow-hidden">
+              {/* Lista de conversas */}
+              <div className="w-1/3 border-r border-border flex flex-col bg-background">
+                <div className="p-4 border-b border-border">
+                  <input
+                    type="text"
+                    placeholder="Buscar conversas..."
+                    className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  {conversasWhatsApp.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-6">
+                      <Phone size={48} className="mb-3 opacity-50" />
+                      <p className="text-center">Nenhuma conversa encontrada</p>
+                      <p className="text-sm text-center mt-2">As mensagens recebidas aparecerão aqui</p>
+                    </div>
+                  ) : (
+                    <div className="p-2">
+                      {conversasWhatsApp.map((conversa) => (
+                        <button
+                          key={conversa.telefone}
+                          onClick={() => abrirConversaWhatsApp(conversa.telefone)}
+                          className={`w-full p-4 rounded-lg mb-2 text-left transition ${
+                            conversaWhatsAppSelecionada?.telefone === conversa.telefone
+                              ? 'bg-primary/10 border-2 border-primary'
+                              : 'bg-muted/50 hover:bg-muted border-2 border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-12 h-12 rounded-full bg-[#25D366] flex items-center justify-center text-white flex-shrink-0">
+                              <Phone size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="font-semibold text-card-foreground truncate">
+                                  {conversa.nome}
+                                </h4>
+                                {conversa.naoLidas > 0 && (
+                                  <span className="bg-[#25D366] text-white text-xs px-2 py-0.5 rounded-full ml-2 flex-shrink-0">
+                                    {conversa.naoLidas}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground truncate mb-1">
+                                {conversa.telefone}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {conversa.ultimaMensagem}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {new Date(conversa.timestamp).toLocaleString('pt-BR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Área de mensagens */}
+              <div className="flex-1 flex flex-col bg-[#ECE5DD]">
+                {conversaWhatsAppSelecionada ? (
+                  <>
+                    {/* Header da conversa */}
+                    <div className="bg-[#F0F2F5] border-b border-border px-6 py-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center text-white">
+                        <Phone size={18} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-card-foreground">
+                          {conversaWhatsAppSelecionada.nome}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {conversaWhatsAppSelecionada.telefone}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Mensagens */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                      {mensagensWhatsApp.length === 0 ? (
+                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                          <p>Nenhuma mensagem ainda</p>
+                        </div>
+                      ) : (
+                        <>
+                          {mensagensWhatsApp.map((msg: any) => (
+                            <div
+                              key={msg.id}
+                              className={`flex ${msg.remetente === 'cliente' ? 'justify-start' : 'justify-end'}`}
+                            >
+                              <div
+                                className={`max-w-[70%] rounded-lg px-4 py-2 shadow ${
+                                  msg.remetente === 'cliente'
+                                    ? 'bg-white text-card-foreground'
+                                    : 'bg-[#DCF8C6] text-card-foreground'
+                                }`}
+                              >
+                                {msg.remetente === 'agente' && msg.agente_nome && (
+                                  <p className="text-xs text-muted-foreground mb-1 font-medium">
+                                    {msg.agente_nome}
+                                  </p>
+                                )}
+                                <p className="text-sm whitespace-pre-wrap break-words">{msg.texto}</p>
+                                <p className="text-xs text-muted-foreground mt-1 text-right">
+                                  {new Date(msg.created_at).toLocaleTimeString('pt-BR', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                          <div ref={whatsappEndRef} />
+                        </>
+                      )}
+                    </div>
+
+                    {/* Input de mensagem */}
+                    <div className="bg-[#F0F2F5] px-6 py-3 border-t border-border">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={novaMensagemWhatsApp}
+                          onChange={(e) => setNovaMensagemWhatsApp(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && enviarMensagemWhatsApp()}
+                          placeholder="Digite uma mensagem..."
+                          className="flex-1 px-4 py-3 border border-input rounded-full bg-white focus:outline-none focus:ring-2 focus:ring-[#25D366]"
+                        />
+                        <button
+                          onClick={enviarMensagemWhatsApp}
+                          disabled={!novaMensagemWhatsApp.trim()}
+                          className="p-3 bg-[#25D366] text-white rounded-full hover:bg-[#20BD5A] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Send size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <div className="text-center">
+                      <Phone size={64} className="mx-auto mb-4 opacity-30" />
+                      <p className="text-lg">Selecione uma conversa</p>
+                      <p className="text-sm mt-2">Escolha uma conversa da lista para começar</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Botão Abrir WhatsApp */}
+      <button
+        onClick={() => setWhatsappAberto(true)}
+        className="fixed bottom-6 right-6 p-4 bg-[#25D366] text-white rounded-full shadow-lg hover:bg-[#20BD5A] transition"
+        title="WhatsApp Business"
+      >
+        <Phone size={24} />
+      </button>
 
       {/* Botão Abrir Chats GPT Maker */}
       <button
